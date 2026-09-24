@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Pedidos Cliente - Demo v2</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+
+        .tema-selector { text-align: center; margin-bottom: 30px; }
+
+        .tema-selector button {
+            padding: 10px 20px;
+            margin: 0 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .tema-selector button.active {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        body.tema-black {
+            --bg-primary: #080a10;
+            --color-accent: #e30613;
+            --text-primary: #ffffff;
+            --input-bg: #1a1d2e;
+            --input-border: #333;
+        }
+
+        body.tema-vivid {
+            --bg-primary: #ffffff;
+            --color-accent: #ff0000;
+            --text-primary: #000000;
+            --input-bg: #f9f9f9;
+            --input-border: #00aa00;
+        }
+
+        body.tema-gray {
+            --bg-primary: #ffffff;
+            --color-accent: #555555;
+            --text-primary: #000000;
+            --input-bg: #f0f0f0;
+            --input-border: #cccccc;
+        }
+
+        .tema-selector button.black { background-color: #080a10; color: #e30613; border: 2px solid #e30613; }
+        .tema-selector button.vivid { background: linear-gradient(135deg, #ff0000, #00aa00); color: white; border: none; }
+        .tema-selector button.gray { background-color: #555555; color: white; border: 2px solid #555555; }
+
+        .container {
+            max-width: 1700px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1.3fr;
+            gap: 40px;
+        }
+
+        .section {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .section h2 {
+            color: var(--color-accent);
+            margin-bottom: 20px;
+            font-size: 20px;
+            font-weight: 700;
+            border-bottom: 2px solid var(--color-accent);
+            padding-bottom: 12px;
+        }
+
+        .form-group { margin-bottom: 16px; }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--input-border);
+            background-color: var(--input-bg);
+            color: var(--text-primary);
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 120px;
+            font-family: 'Courier New', monospace;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: var(--color-accent);
+            box-shadow: 0 0 0 3px rgba(227, 6, 19, 0.15);
+        }
+
+        .subtipo-taisa {
+            display: none;
+            margin-top: -6px;
+        }
+
+        .subtipo-taisa.visible { display: block; }
+
+        .btn-primary, .btn-imprimir {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--color-accent);
+            color: var(--bg-primary);
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover, .btn-imprimir:hover { transform: translateY(-2px); }
+
+        .contador-pedidos {
+            font-size: 12px;
+            opacity: 0.7;
+            margin-top: 4px;
+        }
+
+        .lista-pedidos { margin-top: 25px; max-height: 220px; overflow-y: auto; }
+        .lista-pedidos h3 { font-size: 13px; margin-bottom: 12px; color: var(--color-accent); font-weight: 700; }
+
+        .pedido-item {
+            background-color: var(--input-bg);
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            border-left: 3px solid var(--color-accent);
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .pedido-item strong { color: var(--color-accent); }
+        .pedido-item .id-tag { font-size: 10px; opacity: 0.6; }
+
+        /* GRID DE ETIQUETAS */
+        .etiquetas-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 15px;
+            max-height: 600px;
+            overflow-y: auto;
+            padding: 15px;
+            background-color: var(--input-bg);
+            border-radius: 8px;
+        }
+
+        /* ETIQUETA HORIZONTAL: 15cm ancho x 10cm alto (más ancha que alta) */
+        .etiqueta-wrapper {
+            width: 100%;
+            max-width: 450px;
+            aspect-ratio: 15 / 10;
+        }
+
+        .etiqueta {
+            width: 150mm;
+            height: 100mm;
+            background: white;
+            color: #000;
+            border: 2px solid #000;
+            padding: 5mm 8mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            font-family: Arial, sans-serif;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+            transform: scale(0.62);
+            transform-origin: top left;
+        }
+
+        .etiqueta-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .logo-taisa {
+            height: 12mm;
+            width: auto;
+        }
+
+        .fecha-id {
+            text-align: right;
+            font-size: 9px;
+            color: #333;
+        }
+
+        .fecha-id .id-unico {
+            font-weight: bold;
+            font-size: 10px;
+            margin-top: 1mm;
+        }
+
+        .tienda-destino {
+            font-size: 30px;
+            font-weight: 900;
+            color: #000;
+            text-transform: uppercase;
+            text-align: center;
+            line-height: 1;
+        }
+
+        .numero-pedido-h {
+            font-size: 46px;
+            font-weight: 900;
+            text-align: center;
+            color: #000;
+            letter-spacing: 2mm;
+            line-height: 1;
+        }
+
+        .origen-info {
+            text-align: center;
+            font-size: 26px;
+            font-weight: 900;
+            color: #e30613;
+            text-transform: uppercase;
+            line-height: 1;
+        }
+
+        .etiqueta-bottom {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .barcode-svg { max-height: 16mm; }
+
+        @media print {
+            body { background: white; }
+            .tema-selector, .section:first-child, .form-etiqueta-controls { display: none; }
+            .etiquetas-grid {
+                display: block;
+                background: none;
+                padding: 0;
+                max-height: none;
+            }
+            .etiqueta-wrapper {
+                max-width: none;
+                page-break-after: always;
+            }
+            .etiqueta {
+                transform: none;
+                box-shadow: none;
+                margin-bottom: 5mm;
+            }
+        }
+
+        @media (max-width: 1300px) {
+            .container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body class="tema-black">
+
+<div class="tema-selector">
+    <button class="black active" onclick="cambiarTema('black')">🎨 Black Edition</button>
+    <button class="vivid" onclick="cambiarTema('vivid')">🌈 Rojo/Verde Vivo</button>
+    <button class="gray" onclick="cambiarTema('gray')">⚙️ Gris/Blanco</button>
+</div>
+
+<div class="container">
+    <!-- FORMULARIO LOTE -->
+    <div class="section">
+        <h2>📋 Registrar Lote de Pedidos</h2>
+
+        <div class="form-group">
+            <label for="listaPedidos">Lista de Pedidos (uno por línea, pegado desde Sheet)</label>
+            <textarea id="listaPedidos" placeholder="PED-2025-001234&#10;PED-2025-001235&#10;PED-2025-001236">PED-2025-001234
+PED-2025-001235
+PED-2025-001236
+PED-2025-001237
+PED-2025-001238</textarea>
+            <div class="contador-pedidos" id="contadorPedidos">5 pedidos detectados</div>
+        </div>
+
+        <div class="form-group">
+            <label for="origen">Plataforma/Origen</label>
+            <select id="origen" onchange="toggleSubtipoTaisa()">
+                <option value="MECO" selected>MECO</option>
+                <option value="Valencia">Valencia</option>
+                <option value="Torija">Torija</option>
+                <option value="Antequera">Antequera</option>
+                <option value="Taisa">Taisa</option>
+            </select>
+        </div>
+
+        <div class="form-group subtipo-taisa" id="subtipoTaisaGroup">
+            <label for="subtipoTaisa">Subtipo Taisa</label>
+            <select id="subtipoTaisa">
+                <option value="Devolución">Devolución</option>
+                <option value="Inventario">Inventario</option>
+                <option value="Demarca">Demarca</option>
+                <option value="Petición Reserva">Petición Reserva</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="destino">Tienda Destino</label>
+            <select id="destino">
+                <option value="Málaga" selected>Málaga</option>
+                <option value="Marbella">Marbella</option>
+                <option value="Mijas">Mijas</option>
+                <option value="Granada">Granada</option>
+            </select>
+        </div>
+
+        <button class="btn-primary" onclick="generarLoteEtiquetas()">⚡ Generar Etiquetas del Lote</button>
+
+        <div class="lista-pedidos">
+            <h3>📦 Historial Reciente</h3>
+            <div id="historialPedidos"></div>
+        </div>
+    </div>
+
+    <!-- GRID ETIQUETAS -->
+    <div class="section">
+        <h2>🏷️ Etiquetas Generadas (15 cm ancho x 10 cm alto — Horizontal)</h2>
+
+        <div class="etiquetas-grid" id="etiquetasGrid">
+            <!-- Se generan dinámicamente -->
+        </div>
+
+        <button class="btn-imprimir" onclick="window.print()">🖨️ Imprimir Todas (Zebra)</button>
+    </div>
+</div>
+
+<script>
+    let contadorId = 1000;
+    let etiquetasActuales = [];
+
+    const LOGO_TAISA = 'data:image/png;base64,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';
+
+    function generarIdUnico() {
+        contadorId++;
+        const timestamp = Date.now().toString().slice(-5);
+        return `ID-${contadorId}-${timestamp}`;
+    }
+
+    function normalizarPedido(pedido) {
+        // Fuerza siempre 6 dígitos (rellena con ceros a la izquierda si hace falta)
+        const soloNumeros = pedido.trim().replace(/\D/g, '');
+        return soloNumeros.padStart(6, '0').slice(-6);
+    }
+
+    function toggleSubtipoTaisa() {
+        const origen = document.getElementById('origen').value;
+        const grupo = document.getElementById('subtipoTaisaGroup');
+        grupo.classList.toggle('visible', origen === 'Taisa');
+    }
+
+    document.getElementById('listaPedidos').addEventListener('input', function() {
+        const lineas = this.value.split('\n').filter(l => l.trim() !== '');
+        document.getElementById('contadorPedidos').textContent = `${lineas.length} pedido${lineas.length !== 1 ? 's' : ''} detectado${lineas.length !== 1 ? 's' : ''}`;
+    });
+
+    function formatearFecha() {
+        const hoy = new Date();
+        return `${String(hoy.getDate()).padStart(2, '0')}/${String(hoy.getMonth() + 1).padStart(2, '0')}/${hoy.getFullYear()}`;
+    }
+
+    function generarLoteEtiquetas() {
+        const lineas = document.getElementById('listaPedidos').value.split('\n').filter(l => l.trim() !== '');
+        const origen = document.getElementById('origen').value;
+        const subtipo = document.getElementById('subtipoTaisa').value;
+        const destino = document.getElementById('destino').value;
+
+        if (lineas.length === 0) {
+            alert('❌ No hay pedidos en la lista');
+            return;
+        }
+
+        const origenTexto = origen === 'Taisa' ? `TAISA - ${subtipo.toUpperCase()}` : origen.toUpperCase();
+        const fecha = formatearFecha();
+
+        const grid = document.getElementById('etiquetasGrid');
+        grid.innerHTML = '';
+        etiquetasActuales = [];
+
+        lineas.forEach((pedido, index) => {
+            const idUnico = generarIdUnico();
+            const pedidoLimpio = normalizarPedido(pedido);
+
+            etiquetasActuales.push({ pedido: pedidoLimpio, origen: origenTexto, destino, fecha, idUnico });
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'etiqueta-wrapper';
+            wrapper.innerHTML = `
+                <div class="etiqueta">
+                    <div class="etiqueta-top">
+                        <img src="${LOGO_TAISA}" class="logo-taisa" alt="Taisa Logistics">
+                        <div class="fecha-id">
+                            Creada: ${fecha}
+                            <div class="id-unico">${idUnico}</div>
+                        </div>
+                    </div>
+                    <div class="tienda-destino">${destino}</div>
+                    <div class="numero-pedido-h">${pedidoLimpio}</div>
+                    <div class="origen-info">${origenTexto}</div>
+                    <div class="etiqueta-bottom">
+                        <svg class="barcode-svg" id="barcode-${index}"></svg>
+                    </div>
+                </div>
+            `;
+            grid.appendChild(wrapper);
+        });
+
+        // Generar barcodes después de insertar en DOM
+        setTimeout(() => {
+            etiquetasActuales.forEach((etq, index) => {
+                JsBarcode(`#barcode-${index}`, etq.pedido, {
+                    format: 'CODE128',
+                    width: 1.5,
+                    height: 35,
+                    displayValue: true,
+                    fontSize: 10,
+                    margin: 3
+                });
+            });
+        }, 50);
+
+        actualizarHistorial(lineas.length, origenTexto, destino);
+    }
+
+    function actualizarHistorial(cantidad, origen, destino) {
+        const historial = document.getElementById('historialPedidos');
+        const item = document.createElement('div');
+        item.className = 'pedido-item';
+        item.innerHTML = `
+            <span><strong>${cantidad} pedidos</strong> | ${origen} → ${destino}</span>
+            <span class="id-tag">${formatearFecha()}</span>
+        `;
+        historial.prepend(item);
+    }
+
+    function cambiarTema(tema) {
+        document.body.className = 'tema-' + tema;
+        document.querySelectorAll('.tema-selector button').forEach(btn => btn.classList.remove('active'));
+        event.target.classList.add('active');
+    }
+
+    // Generar demo inicial
+    generarLoteEtiquetas();
+</script>
+
+</body>
+</html>

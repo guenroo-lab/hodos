@@ -1,0 +1,191 @@
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  .hodos-wrap { font-family:'DM Sans', sans-serif; }
+  .hodos-wrap h2 { color: var(--text-primary); }
+  .cards.hodos-cards { display:block; }
+  .hodos-cards .card { max-width:1120px; margin:0 auto 40px auto; border-radius:16px; }
+  .hodos-cards .card.selected { box-shadow:0 0 0 3px #e30613; }
+  .hodos-screen { background:#080a10; color:#fff; border-radius:14px; overflow:hidden; }
+  .hodos-screen * { box-sizing:border-box; }
+  .hodos-topbar { display:flex; align-items:center; gap:10px; padding:12px 20px; border-bottom:2px solid #e30613; }
+  .hodos-logo { width:26px; height:26px; border-radius:6px; background:#e30613; display:flex; align-items:center; justify-content:center; font-family:'Bebas Neue',sans-serif; font-size:15px; }
+  .hodos-topbar .t { font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:1px; }
+  .hodos-body { padding:28px; }
+  .hodos-card-label { text-transform:uppercase; font-size:10px; letter-spacing:1px; color:#8b93b8; margin-bottom:6px; font-weight:700;}
+
+  /* ---- Option A: Wizard elevado ---- */
+  .stepper { display:flex; align-items:center; gap:0; margin-bottom:26px; }
+  .stepper .step { display:flex; align-items:center; gap:10px; opacity:0.45; }
+  .stepper .step.active { opacity:1; }
+  .stepper .step .n { width:28px; height:28px; border-radius:50%; background:#1a1d2e; border:2px solid #565d80; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+  .stepper .step.active .n { background:#e30613; border-color:#e30613; }
+  .stepper .step.done .n { background:#22c55e; border-color:#22c55e; }
+  .stepper .step .label { font-size:12.5px; font-weight:600; }
+  .stepper .line { flex:1; height:2px; background:#2a2e42; margin:0 12px; }
+
+  .tienda-row { display:flex; gap:10px; margin-bottom:22px; }
+  .tienda-pill { flex:1; padding:14px; border-radius:10px; text-align:center; font-weight:700; font-size:13px; border:2px solid transparent; background:#1a1d2e; cursor:default; }
+  .tienda-pill.sel { border-color:#22c55e; background:rgba(34,197,94,0.12); color:#4ade80; }
+
+  .fecha-chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:24px; }
+  .chip { padding:10px 14px; border-radius:999px; background:#1a1d2e; border:1px solid #565d80; font-size:12.5px; font-weight:600; }
+  .chip.sel { background:#e30613; border-color:#e30613; }
+  .chip.cal { display:flex; align-items:center; gap:6px; background:transparent; border:1px dashed #565d80; color:#8b93b8; }
+
+  .scan-card-a { background:#11141d; border:1px solid #2a2e42; border-radius:14px; padding:24px; text-align:center; }
+  .scan-card-a .big-input { margin:14px 0; padding:18px; border-radius:10px; background:#1a1d2e; border:2px solid #e30613; font-size:15px; color:#8b93b8; }
+  .scan-count { font-family:'Bebas Neue',sans-serif; font-size:46px; color:#eb3840; line-height:1; }
+  .manual-toggle { display:inline-flex; align-items:center; gap:8px; margin-top:14px; padding:9px 16px; border-radius:8px; background:#1a1d2e; border:1px solid #565d80; font-size:12.5px; font-weight:600; color:#cdd3ee; }
+  .hint-gesto { margin-top:18px; font-size:11px; color:#565d80; font-style:italic; }
+
+  /* ---- Option B: panel de control ---- */
+  .statbar { display:flex; gap:0; border:1px solid #2a2e42; border-radius:12px; overflow:hidden; margin-bottom:22px; }
+  .statbar .stat { flex:1; padding:16px 20px; border-right:1px solid #2a2e42; }
+  .statbar .stat:last-child { border-right:none; }
+  .statbar .stat .v { font-family:'Bebas Neue',sans-serif; font-size:26px; color:#eb3840; }
+  .statbar .stat .l { font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:#8b93b8; font-weight:700; }
+
+  .panelb-grid { display:grid; grid-template-columns:180px 1fr; gap:24px; }
+  .rail { display:flex; flex-direction:column; gap:0; position:relative; }
+  .rail .rstep { display:flex; align-items:center; gap:10px; padding:10px 0; font-size:12px; font-weight:600; color:#565d80; }
+  .rail .rstep.active { color:#fff; }
+  .rail .rstep .dot { width:10px; height:10px; border-radius:50%; background:#2a2e42; flex-shrink:0; }
+  .rail .rstep.active .dot { background:#e30613; }
+  .rail .rstep.done .dot { background:#22c55e; }
+  .rail::before { content:''; position:absolute; left:4px; top:14px; bottom:14px; width:1px; background:#2a2e42; }
+
+  .fecha-select-b { display:flex; gap:8px; align-items:center; margin-bottom:16px; }
+  .select-b { background:#1a1d2e; border:1px solid #565d80; border-radius:8px; padding:11px 14px; font-size:13px; flex:1; color:#cdd3ee; }
+
+  .scan-card-b { background:#0d0f16; border:1px solid #2a2e42; border-radius:10px; padding:20px; }
+  .scan-row-b { display:flex; gap:10px; align-items:center; }
+  .scan-row-b .big-input { flex:1; padding:15px; border-radius:8px; background:#1a1d2e; border:1px solid #565d80; font-size:14px; color:#8b93b8; }
+  .btn-mini { padding:11px 16px; border-radius:8px; background:#1a1d2e; border:1px solid #565d80; font-size:12px; font-weight:700; color:#cdd3ee; white-space:nowrap; }
+</style>
+
+<div class="hodos-wrap">
+  <h2>¿Qué dirección visual encaja mejor para "Cargar camión"?</h2>
+  <p class="subtitle">Dos formas de elevar la pantalla. Ambas mantienen la marca Taisa/Leroy Merlin (tema Black, que es el que se abre por defecto) — cambia la composición y jerarquía, no la paleta. Se ve el Paso 1 (tienda + fecha) arriba y el Paso 2 (escaneo) abajo, dentro de cada opción.</p>
+
+  <div class="cards hodos-cards">
+
+    <div class="card" data-choice="a" onclick="toggleSelect(this)">
+      <div class="card-body" style="padding:20px;">
+        <h3 style="margin-bottom:10px;">Opción A — Wizard elevado</h3>
+        <p style="margin-bottom:16px;">Mismo lenguaje visual de hoy, pero con más aire, un indicador de pasos claro, y las fechas/tiendas como chips grandes fáciles de tocar.</p>
+        <div class="hodos-screen">
+          <div class="hodos-topbar"><div class="hodos-logo">T</div><div class="t">HODOS</div></div>
+          <div class="hodos-body">
+            <div class="stepper">
+              <div class="step done"><div class="n">✓</div><div class="label">Tienda</div></div>
+              <div class="line"></div>
+              <div class="step active"><div class="n">2</div><div class="label">Fecha y horario</div></div>
+              <div class="line"></div>
+              <div class="step"><div class="n">3</div><div class="label">Escanear</div></div>
+            </div>
+            <div class="hodos-card-label">Tienda destino</div>
+            <div class="tienda-row">
+              <div class="tienda-pill">Málaga</div>
+              <div class="tienda-pill sel">Marbella</div>
+              <div class="tienda-pill">Mijas</div>
+              <div class="tienda-pill">Granada</div>
+            </div>
+            <div class="hodos-card-label">Fecha de entrega</div>
+            <div class="fecha-chips">
+              <div class="chip sel">Hoy</div>
+              <div class="chip">Mañana</div>
+              <div class="chip">Jue 6</div>
+              <div class="chip">Vie 7</div>
+              <div class="chip">Sáb 8</div>
+              <div class="chip">Dom 9</div>
+              <div class="chip">Lun 10</div>
+              <div class="chip cal">📅 Otra fecha</div>
+            </div>
+          </div>
+        </div>
+        <div class="hodos-screen" style="margin-top:16px;">
+          <div class="hodos-topbar"><div class="hodos-logo">T</div><div class="t">HODOS</div></div>
+          <div class="hodos-body">
+            <div class="stepper">
+              <div class="step done"><div class="n">✓</div><div class="label">Tienda</div></div>
+              <div class="line"></div>
+              <div class="step done"><div class="n">✓</div><div class="label">Fecha y horario</div></div>
+              <div class="line"></div>
+              <div class="step active"><div class="n">3</div><div class="label">Escanear</div></div>
+            </div>
+            <div class="scan-card-a">
+              <div class="hodos-card-label" style="text-align:center;">CARGA-000041 — Marbella, hoy 17:00</div>
+              <div class="scan-count">12</div>
+              <div style="font-size:11px;color:#8b93b8;">soportes cargados</div>
+              <div class="big-input">Esperando lectura del escáner…</div>
+              <div class="manual-toggle">⌨ Introducir a mano</div>
+              <div class="hint-gesto">(mantén pulsado el título de la carga para más opciones)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" data-choice="b" onclick="toggleSelect(this)">
+      <div class="card-body" style="padding:20px;">
+        <h3 style="margin-bottom:10px;">Opción B — Panel de control operativo</h3>
+        <p style="margin-bottom:16px;">Más denso y "centro de operaciones": una franja de datos clave siempre visible arriba y una guía lateral de progreso, pensado para quien mira la pantalla muchas veces al día.</p>
+        <div class="hodos-screen">
+          <div class="hodos-topbar"><div class="hodos-logo">T</div><div class="t">HODOS</div></div>
+          <div class="hodos-body">
+            <div class="statbar">
+              <div class="stat"><div class="v">Marbella</div><div class="l">Tienda</div></div>
+              <div class="stat"><div class="v">Hoy</div><div class="l">Entrega</div></div>
+              <div class="stat"><div class="v">17:00</div><div class="l">Horario</div></div>
+            </div>
+            <div class="panelb-grid">
+              <div class="rail">
+                <div class="rstep done"><div class="dot"></div>Tienda</div>
+                <div class="rstep active"><div class="dot"></div>Fecha</div>
+                <div class="rstep"><div class="dot"></div>Escanear</div>
+                <div class="rstep"><div class="dot"></div>Cerrar</div>
+              </div>
+              <div>
+                <div class="hodos-card-label">Fecha de entrega</div>
+                <div class="fecha-select-b">
+                  <select class="select-b" disabled><option>Hoy — jueves 6</option></select>
+                  <div class="btn-mini">📅 Elegir otra</div>
+                </div>
+                <div class="hodos-card-label">Horario</div>
+                <div class="fecha-select-b"><select class="select-b" disabled><option>17:00</option></select></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="hodos-screen" style="margin-top:16px;">
+          <div class="hodos-topbar"><div class="hodos-logo">T</div><div class="t">HODOS</div></div>
+          <div class="hodos-body">
+            <div class="statbar">
+              <div class="stat"><div class="v">12</div><div class="l">Cargados</div></div>
+              <div class="stat"><div class="v">Marbella</div><div class="l">Tienda</div></div>
+              <div class="stat"><div class="v">CARGA-000041</div><div class="l">ID carga</div></div>
+            </div>
+            <div class="panelb-grid">
+              <div class="rail">
+                <div class="rstep done"><div class="dot"></div>Tienda</div>
+                <div class="rstep done"><div class="dot"></div>Fecha</div>
+                <div class="rstep active"><div class="dot"></div>Escanear</div>
+                <div class="rstep"><div class="dot"></div>Cerrar</div>
+              </div>
+              <div>
+                <div class="scan-card-b">
+                  <div class="scan-row-b">
+                    <div class="big-input">Esperando lectura…</div>
+                    <div class="btn-mini">⌨ A mano</div>
+                  </div>
+                </div>
+                <div class="hint-gesto">(mantén pulsado el título "CARGA-000041" para más opciones)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>

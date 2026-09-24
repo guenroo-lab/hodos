@@ -1,0 +1,2142 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HODOS - Taisa Logistics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { height:100%; }
+    body {
+      font-family:'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height:100dvh;
+      display:flex;
+      flex-direction:column;
+    }
+    /* --color-accent-text: variante del acento pensada para texto sobre --bg-primary.
+       En Black Edition, el rojo de marca (#e30613) da 4.05:1 sobre el fondo oscuro —
+       por debajo del mínimo WCAG AA de 4.5:1 para texto normal — así que aquí se usa un
+       rojo ligeramente más claro (#eb3840, 4.87:1) solo para texto; fondos, botones y
+       bordes siguen usando --color-accent tal cual. En Vivid/Gray el acento ya cumple
+       de sobra, así que --color-accent-text es idéntico a --color-accent. */
+    body.tema-black { --bg-primary:#080a10; --bg-panel:#11141d; --color-accent:#e30613; --color-accent-text:#eb3840; --color-error:#ff6b6b; --text-primary:#fff; --input-bg:#1a1d2e; --input-border:#565d80; }
+    body.tema-vivid { --bg-primary:#fff; --bg-panel:#fbfbfb; --color-accent:#e30000; --color-accent-text:#e30000; --color-error:#c62828; --text-primary:#111; --input-bg:#f5f5f5; --input-border:#8f8f8f; }
+    body.tema-gray  { --bg-primary:#fff; --bg-panel:#fafafa; --color-accent:#555; --color-accent-text:#555; --color-error:#c62828; --text-primary:#111; --input-bg:#f0f0f0; --input-border:#8f8f8f; }
+    body { background:var(--bg-panel); color:var(--text-primary); }
+
+    button, input, select { font-family:inherit; }
+    svg.icon { width:20px; height:20px; flex-shrink:0; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+    button { cursor:pointer; transition:background-color 180ms ease, opacity 180ms ease, transform 180ms ease, border-color 180ms ease; }
+    .resultados-tabla tbody tr { transition:background-color 150ms ease; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline:2px solid var(--color-accent); outline-offset:2px;
+    }
+    @media (prefers-reduced-motion:reduce) {
+      * { transition:none !important; animation:none !important; }
+    }
+
+    /* ── Cabecera ── */
+    .app-header {
+      flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+      padding:14px 24px; background:var(--bg-primary); border-bottom:2px solid var(--color-accent);
+    }
+    .app-header .brand { display:flex; align-items:center; gap:14px; }
+    .app-header .logo-header { height:36px; width:auto; }
+    /* La cabecera usa background:var(--bg-primary), que en Vivid/Gray es blanco — texto
+       fijo en #fff quedaba invisible (blanco sobre blanco). Usa --text-primary, que ya
+       se adapta correctamente a cada tema. */
+    .app-header .titulo { font-family:'Bebas Neue', sans-serif; font-size:30px; letter-spacing:1px; color:var(--text-primary); line-height:1; }
+    .app-header .subtitulo { font-size:11px; color:var(--text-primary); opacity:0.65; letter-spacing:0.5px; }
+    .tema-toggle-btn { width:28px; height:28px; border-radius:50%; border:2px solid rgba(255,255,255,0.35); cursor:pointer; padding:0; transition:transform 0.15s; }
+    .tema-toggle-btn:active { transform:scale(0.88); }
+    .tema-toggle-btn.tema-toggle-black { background:#080a10; }
+    .tema-toggle-btn.tema-toggle-vivid { background:linear-gradient(135deg,#ff0000,#00aa00); }
+    .tema-toggle-btn.tema-toggle-gray  { background:#555; }
+
+    /* ── Cuerpo: sidebar + contenido ── */
+    .app-body { flex:1; display:flex; min-height:0; }
+
+    .app-sidebar {
+      flex-shrink:0; width:210px; display:flex; flex-direction:column; gap:4px;
+      padding:20px 12px; background:var(--bg-primary); border-right:1px solid var(--input-border);
+    }
+    .app-sidebar button {
+      display:flex; align-items:center; gap:12px; padding:13px 14px; min-height:44px;
+      border:none; background:transparent; color:var(--text-primary); border-radius:8px;
+      cursor:pointer; font-size:14px; font-weight:600; text-align:left; opacity:0.65;
+    }
+    .app-sidebar button:hover { opacity:0.9; background:var(--input-bg); }
+    .app-sidebar button.active { background:var(--color-accent); color:#fff; opacity:1; }
+
+    .sidebar-rotulo {
+      margin:14px 0 2px; padding:0 14px; font-size:11px; font-weight:700;
+      letter-spacing:0.08em; text-transform:uppercase; opacity:0.5;
+      color:var(--text-primary);
+    }
+    .app-sidebar button.sub { padding-left:30px; font-size:13.5px; }
+
+    .app-main { flex:1; min-width:0; overflow-y:auto; padding:28px; }
+
+    @media (max-width:860px) {
+      .app-body { flex-direction:column; }
+      .app-sidebar {
+        width:100%; flex-direction:row; border-right:none; border-bottom:2px solid var(--color-accent);
+        padding:8px 12px; gap:6px;
+      }
+      .app-sidebar button { flex:1; justify-content:center; padding:10px 6px; font-size:12.5px; }
+      .sidebar-rotulo { display:none; }
+      .app-sidebar button.sub { padding-left:6px; }
+      .app-main { padding:18px; }
+    }
+
+    .vista-oculta { display:none !important; }
+
+    /* ── Formularios y tarjetas ── */
+    .container { max-width:1600px; margin:0 auto; display:grid; grid-template-columns:1fr 1.3fr; gap:28px; }
+    @media (max-width:1200px) { .container { grid-template-columns:1fr; } }
+
+    .pendientes-grid { max-width:1600px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:24px; }
+    .pendientes-contador { font-size:12px; font-weight:600; opacity:0.75; text-transform:none; letter-spacing:0; margin-left:8px; }
+    .pendientes-alerta-badge { background:var(--color-error); color:#fff; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; white-space:nowrap; }
+    /* La tabla puede tener más columnas de las que caben en una tarjeta estrecha (p.ej.
+       en móvil): que desborde dentro de este contenedor con scroll propio, nunca fuera
+       de la tarjeta ni de la pantalla. */
+    .pendientes-tabla-wrap { overflow-x:auto; }
+    .pendientes-tabla-wrap .resultados-tabla { min-width:340px; }
+    .pendientes-id-unico { display:block; font-size:10px; color:var(--color-accent-text); opacity:0.7; font-weight:normal; margin-top:2px; }
+    .badge-nivel { display:inline-block; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:700; white-space:nowrap; }
+    .badge-nivel-ok { background:var(--input-bg); border:1px solid var(--input-border); color:var(--text-primary); opacity:0.75; }
+    .badge-nivel-amarillo { background:#f1c40f; color:#1a1a2e; }
+    .badge-nivel-naranja { background:#e67e22; color:#fff; }
+    .badge-nivel-rojo { background:#e74c3c; color:#fff; }
+    .badge-razon-flujo { display:inline-block; margin-top:2px; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:600; white-space:nowrap; background:var(--input-bg); border:1px solid var(--input-border); color:var(--text-primary); opacity:0.8; }
+
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:1000; padding:20px; }
+    .modal-caja { background:var(--bg-primary); border:1px solid var(--input-border); border-radius:12px; padding:28px; max-width:520px; width:100%; box-shadow:0 10px 40px rgba(0,0,0,0.5); }
+    .modal-caja h3 { color:var(--color-error); margin-bottom:14px; font-size:18px; }
+    .modal-caja p { font-size:14px; line-height:1.6; white-space:pre-wrap; margin-bottom:20px; }
+
+    .section { background:var(--bg-primary); border:1px solid var(--input-border); border-radius:10px; padding:26px; }
+    .section h2 { color:var(--color-accent-text); margin-bottom:20px; font-size:18px; border-bottom:2px solid var(--color-accent); padding-bottom:12px; }
+    .form-group { margin-bottom:16px; }
+    label { display:block; margin-bottom:8px; font-size:13px; font-weight:600; opacity:0.85; }
+    input, select, textarea {
+      width:100%; padding:12px; border:1px solid var(--input-border); background:var(--input-bg);
+      color:var(--text-primary); border-radius:8px; font-size:14px;
+    }
+    input:focus, select:focus, textarea:focus { outline:2px solid var(--color-accent); outline-offset:1px; }
+    textarea { resize:vertical; min-height:120px; font-family:'Courier New',monospace; }
+    .subtipo-taisa { display:none; margin-top:-6px; }
+    .subtipo-taisa.visible { display:block; }
+
+    .btn-primary, .btn-imprimir, .busqueda-form button {
+      display:flex; align-items:center; justify-content:center; gap:8px;
+      padding:13px; min-height:44px; background:var(--color-accent); color:#fff;
+      border:none; border-radius:8px; font-size:14px; font-weight:700; cursor:pointer;
+    }
+    .btn-primary, .btn-imprimir { width:100%; margin-top:10px; }
+    .btn-primary:disabled { opacity:0.5; cursor:wait; }
+    .contador-pedidos { font-size:12px; opacity:0.7; margin-top:4px; }
+    .aviso-error { color:var(--color-error); font-size:13px; margin-top:8px; }
+    .lista-pedidos { margin-top:22px; max-height:220px; overflow-y:auto; }
+    .lista-pedidos h3 { font-size:12px; margin-bottom:10px; color:var(--color-accent-text); text-transform:uppercase; letter-spacing:0.5px; }
+    .pedido-item {
+      background:var(--input-bg); padding:10px 12px; margin-bottom:8px; border-radius:6px;
+      border-left:3px solid var(--color-accent); font-size:12.5px; display:flex; justify-content:space-between;
+    }
+    .etiquetas-preview { margin-top:14px; padding:14px; background:var(--input-bg); border-radius:8px; font-size:13px; max-height:280px; overflow-y:auto; }
+
+    /* ── Contenido opcional por soporte ── */
+    .hint-texto { font-size:12.5px; opacity:0.75; margin-bottom:16px; }
+    .contenido-item { background:var(--input-bg); border-radius:8px; padding:10px 12px; margin-bottom:10px; border-left:3px solid var(--color-accent); }
+    .contenido-item-header { display:flex; justify-content:space-between; align-items:center; font-size:12.5px; gap:10px; }
+    .contenido-item-body { margin-top:10px; }
+    .contenido-linea { display:flex; gap:8px; margin-bottom:8px; align-items:center; }
+    .contenido-linea input.contenido-descripcion { flex:3; }
+    .contenido-linea input.contenido-cantidad { flex:1; }
+    .btn-link { background:none; border:none; color:var(--color-accent-text); font-size:12.5px; font-weight:700; cursor:pointer; padding:4px; white-space:nowrap; }
+    .btn-secundario { background:var(--bg-panel); border:1px solid var(--input-border); color:var(--text-primary); border-radius:6px; padding:8px 14px; font-size:13px; cursor:pointer; }
+    .contenido-estado { font-size:12px; opacity:0.75; margin-left:8px; }
+
+    /* ── Selector de tienda por botones (estilo Carta de Portes SIE) ── */
+    .tienda-selector { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+    .tienda-btn {
+      display:flex; align-items:center; gap:8px; padding:12px 18px; border-radius:10px;
+      border:2px solid var(--input-border); background:var(--input-bg); color:var(--text-primary);
+      cursor:pointer; font-size:14px; font-weight:700;
+    }
+    .tienda-btn .tienda-dot { width:14px; height:14px; border-radius:50%; flex-shrink:0; }
+    .tienda-btn .tienda-check { display:none; font-weight:900; }
+    .tienda-btn.tienda-malaga .tienda-dot   { background:#22c55e; }
+    .tienda-btn.tienda-marbella .tienda-dot { background:#3498db; }
+    .tienda-btn.tienda-mijas .tienda-dot    { background:#9b59b6; }
+    .tienda-btn.tienda-granada .tienda-dot  { background:#f39c12; }
+    .tienda-btn.sel-malaga   { border-color:#22c55e; background:#147638; box-shadow:0 4px 14px rgba(20,118,56,0.45); }
+    .tienda-btn.sel-marbella { border-color:#3498db; background:#1f5b83; box-shadow:0 4px 14px rgba(31,91,131,0.45); }
+    .tienda-btn.sel-mijas    { border-color:#9b59b6; background:#5d356d; box-shadow:0 4px 14px rgba(93,53,109,0.45); }
+    .tienda-btn.sel-granada  { border-color:#f39c12; background:#925e0b; box-shadow:0 4px 14px rgba(146,94,11,0.45); }
+    .tienda-btn.sel-malaga .tienda-check, .tienda-btn.sel-marbella .tienda-check,
+    .tienda-btn.sel-mijas .tienda-check, .tienda-btn.sel-granada .tienda-check { display:inline; }
+    .tienda-btn.sel-malaga .tienda-name, .tienda-btn.sel-marbella .tienda-name,
+    .tienda-btn.sel-mijas .tienda-name, .tienda-btn.sel-granada .tienda-name { color:#fff; }
+    .tienda-btn.sel-malaga .tienda-dot, .tienda-btn.sel-marbella .tienda-dot,
+    .tienda-btn.sel-mijas .tienda-dot, .tienda-btn.sel-granada .tienda-dot { background:#fff; }
+
+    /* ── Indicador de pasos (Cargar camión) ── */
+    .camion-stepper { display:flex; align-items:center; margin-bottom:24px; }
+    .camion-stepper .paso { display:flex; align-items:center; gap:10px; opacity:0.45; }
+    .camion-stepper .paso.activo, .camion-stepper .paso.hecho { opacity:1; }
+    .camion-stepper .paso .num {
+      width:26px; height:26px; border-radius:50%; flex-shrink:0;
+      background:var(--input-bg); border:2px solid var(--input-border);
+      display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;
+    }
+    .camion-stepper .paso.activo .num { background:var(--color-accent); border-color:var(--color-accent); color:#fff; }
+    .camion-stepper .paso.hecho .num { background:#147638; border-color:#147638; color:#fff; }
+    .camion-stepper .paso .etiqueta { font-size:12.5px; font-weight:600; white-space:nowrap; }
+    .camion-stepper .linea { flex:1; height:2px; background:var(--input-border); margin:0 10px; }
+
+    /* ── Chips de fecha rápida (Cargar camión) ── */
+    .fecha-chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+    .fecha-chip {
+      padding:10px 14px; border-radius:999px; font-size:12.5px; font-weight:600;
+      background:var(--input-bg); border:1px solid var(--input-border); color:var(--text-primary);
+      cursor:pointer;
+    }
+    /* Verde (no el rojo de marca) a propósito: el rojo ya se usa por toda la pantalla
+       para acentos/botones, así que un chip rojo no se distinguía lo suficiente del
+       resto. El verde es un color que aquí solo significa "elegido", sin competencia
+       visual — mismo verde que ya usa el indicador de pasos para "paso completado". */
+    .fecha-chip.sel { background:#147638; border-color:#147638; color:#fff; font-weight:700; border-width:2px; box-shadow:0 3px 10px rgba(20,118,56,0.5); transform:scale(1.06); }
+    .fecha-chip.sel::before { content:'✓ '; }
+    .fecha-chip.fecha-chip-otra { border-style:dashed; }
+
+    /* ── Modo manual en el escaneo (Cargar camión) ── */
+    .btn-modo-manual.activo { background:var(--color-accent); border-color:var(--color-accent); color:#fff; }
+
+    /* ── Panel de carga masiva (Cargar camión, acceso por gesto oculto) ── */
+    /* El gesto se activa manteniendo pulsado #camionTitulo — sin esto, un móvil
+       interpreta la pulsación larga sobre texto como "seleccionar/copiar" (el menú
+       nativo de iOS/Android) y se come el gesto antes de que llegue el evento. */
+    #camionTitulo { -webkit-touch-callout:none; -webkit-user-select:none; -moz-user-select:none; user-select:none; }
+    .item-carga-masiva { display:flex; align-items:center; gap:10px; padding:9px 4px; border-bottom:1px solid var(--input-border); font-size:13px; }
+    .item-carga-masiva .info { flex:1; }
+    .item-carga-masiva .info .id { font-weight:600; }
+    .item-carga-masiva .info .origen { opacity:0.7; font-size:11.5px; }
+    /* La regla global "input { width:100% }" (pensada para campos de texto) también
+       alcanzaba a los checkboxes, convirtiéndolos en bloques grandes con fondo/borde
+       propios de un input de texto — de ahí que la lista de carga masiva (y cualquier
+       otra tabla con checkboxes) se viera descuadrada. Los checkboxes vuelven a su
+       tamaño nativo aquí. */
+    input[type="checkbox"] { width:auto; flex-shrink:0; padding:0; border-radius:3px; background:none; accent-color:var(--color-accent); }
+
+    /* ── Buscadores ── */
+    .busqueda-form {
+      display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:14px; align-items:end;
+      margin-bottom:22px; background:var(--bg-primary); border:1px solid var(--input-border);
+      padding:22px; border-radius:10px;
+    }
+    .busqueda-form .form-group { margin-bottom:0; }
+
+    .resultados-wrap { background:var(--bg-primary); border:1px solid var(--input-border); border-radius:10px; overflow:hidden; }
+    .resultados-tabla { width:100%; border-collapse:collapse; font-size:13px; }
+    .resultados-tabla th, .resultados-tabla td { padding:12px 14px; text-align:left; border-bottom:1px solid var(--input-border); }
+    .resultados-tabla th { color:var(--color-accent-text); text-transform:uppercase; font-size:11px; letter-spacing:0.5px; }
+    .resultados-tabla tbody tr:hover { background:var(--input-bg); }
+    .batea-pendiente { opacity:0.55; }
+    .batea-ok { color:var(--color-accent-text); font-weight:700; }
+    .sin-resultados, .cargando-resultados { opacity:0.6; padding:30px; text-align:center; }
+
+    /* Fusión Carta de Portes SIE (2026-09-15): distinguir de un vistazo los pedidos
+       cliente (HODOS) de los palets de refill (SIE) — dos tablas separadas, cada una
+       con su título+badge de color y una franja lateral del mismo color en sus filas. */
+    .tabla-titulo { display:flex; align-items:center; gap:8px; margin:20px 4px 10px; font-weight:700; font-size:14px; }
+    .tabla-titulo .tabla-contador { margin-left:auto; opacity:0.6; font-weight:600; font-size:12px; }
+    .badge-origen { display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:0.5px; color:#fff; }
+    .badge-origen-hodos { background:var(--color-accent); }
+    .badge-origen-sie { background:#2f8fd6; }
+    /* Lista compacta de soportes/palets ya escaneados: una sola línea por fila (no la
+       simulación de tabla en tarjeta de .resultados-tabla, que en móvil ocupaba 3 líneas
+       por soporte solo para ID/Origen/Quitar) — pensado para uso constante desde el
+       móvil durante el escaneo, donde hace falta ver muchas filas sin scroll excesivo
+       y un botón de borrar grande y fácil de acertar con el dedo. */
+    .lista-soportes { display:flex; flex-direction:column; }
+    .fila-soporte {
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding:10px 14px; border-bottom:1px solid var(--input-border);
+    }
+    .fila-soporte:last-child { border-bottom:none; }
+    .fila-soporte:hover { background:var(--input-bg); }
+    .fila-origen-hodos { border-left:4px solid var(--color-accent); }
+    .fila-origen-sie { border-left:4px solid #2f8fd6; }
+    .fila-soporte-info { display:flex; flex-direction:column; gap:2px; min-width:0; }
+    .valor-id { font-weight:700; color:var(--color-accent-text); font-size:15px; }
+    .valor-sscc { font-weight:700; color:#2f8fd6; font-size:15px; letter-spacing:0.3px; }
+    .fila-soporte-sub {
+      font-size:12px; opacity:0.7; overflow:hidden; text-overflow:ellipsis;
+      white-space:nowrap; max-width:60vw;
+    }
+    .btn-quitar-fila {
+      flex-shrink:0; border:none; background:transparent; color:var(--color-error); cursor:pointer;
+      font-size:20px; line-height:1; font-weight:700; border-radius:8px;
+      min-width:44px; min-height:44px; /* objetivo táctil mínimo, uso constante desde el móvil */
+    }
+    .btn-quitar-fila:hover, .btn-quitar-fila:active { background:var(--bg-panel); }
+
+    @media (max-width:700px) {
+      .resultados-tabla thead { display:none; }
+      .resultados-tabla, .resultados-tabla tbody, .resultados-tabla tr, .resultados-tabla td { display:block; width:100%; }
+      .resultados-tabla tr { margin:12px; border:1px solid var(--input-border); border-radius:8px; padding:4px 12px; }
+      .resultados-tabla td { border:none; padding:8px 0; display:flex; justify-content:space-between; gap:12px; }
+      .resultados-tabla td::before { content:attr(data-label); font-weight:600; color:var(--color-accent-text); font-size:11px; text-transform:uppercase; }
+
+      /* "Cargar camión" (Paso 1) en móvil: los botones de tienda y el bloque
+         fecha/horario/botón dejaban de aprovechar el ancho de pantalla porque
+         reutilizaban un layout pensado para escritorio (flex-wrap sin ancho fijo,
+         grid de columna estrecha) — aquí se fuerza a ocupar todo el ancho de forma
+         ordenada en vez de envolver en filas irregulares. */
+      .tienda-selector { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+      .tienda-btn { justify-content:center; padding:16px 10px; }
+      .busqueda-form { grid-template-columns:1fr; padding:18px; }
+      .fecha-chips .fecha-chip { flex:1 1 calc(33.333% - 6px); text-align:center; }
+    }
+
+    .aviso-tienda-invalida { max-width:600px; margin:60px auto; text-align:center; padding:30px; background:var(--bg-primary); border:1px solid var(--input-border); border-radius:10px; }
+  </style>
+</head>
+<body class="tema-black">
+
+<div class="app-header">
+  <div class="brand">
+    <img src="data:image/png;base64,<?= LOGO_TAISA_B64 ?>" class="logo-header" alt="Taisa Logistics">
+    <div>
+      <div class="titulo">HODOS</div>
+      <div class="subtitulo">Taisa Logistics</div>
+    </div>
+  </div>
+  <button class="tema-toggle-btn tema-toggle-black" id="temaToggleBtn" title="Cambiar tema (Black → Vivid → Gris)" onclick="cambiarTema()"></button>
+</div>
+
+<div id="avisoTiendaInvalida" class="aviso-tienda-invalida vista-oculta">
+  <h2>Enlace no válido</h2>
+  <p>Falta especificar la tienda en el enlace (ej. <code>?vista=tienda&amp;tienda=Malaga</code>).</p>
+</div>
+
+<div class="app-body">
+  <nav id="tabBar" class="app-sidebar">
+    <button data-tab="carga" class="active" onclick="cambiarPestana('carga')">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>
+      <span>Cargar lote</span>
+    </button>
+    <button data-tab="interno" onclick="cambiarPestana('interno')">
+      <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span>Buscar</span>
+    </button>
+    <button data-tab="pendientes" onclick="cambiarPestana('pendientes')">
+      <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>Pendientes</span>
+    </button>
+    <button data-tab="incpc" onclick="cambiarPestana('incpc')">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>Incidencias PedidoCliente</span>
+    </button>
+    <button data-tab="preparacion" onclick="cambiarPestana('preparacion')">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span>Peticiones de Reserva</span>
+    </button>
+    <div class="sidebar-rotulo">Arrastres</div>
+    <button class="sub" data-tab="meco" onclick="cambiarPestana('meco')">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      <span>Meco</span>
+    </button>
+    <button class="sub" data-tab="valencia" onclick="cambiarPestana('valencia')">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      <span>Valencia</span>
+    </button>
+    <button class="sub" data-tab="torija" onclick="cambiarPestana('torija')">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      <span>Torija</span>
+    </button>
+    <button class="sub" data-tab="antequera" onclick="cambiarPestana('antequera')">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      <span>Antequera</span>
+    </button>
+  </nav>
+
+  <main class="app-main">
+    <!-- ══════════ VISTA: CARGAR LOTE ══════════ -->
+    <div id="vistaCarga" class="container">
+      <div class="section">
+        <h2>Registrar Lote de Pedidos</h2>
+
+        <div class="form-group">
+          <label for="listaPedidos">Lista de Pedidos (uno por línea, pegado desde Sheet)</label>
+          <textarea id="listaPedidos" placeholder="286676&#10;123456&#10;100200+100300 (varios pedidos en un mismo soporte)"></textarea>
+          <div class="contador-pedidos" id="contadorPedidos">0 pedidos detectados</div>
+          <div class="hint-texto">Si varios pedidos van juntos en el mismo soporte físico, escríbelos en la misma línea separados por "+".</div>
+        </div>
+
+        <div class="form-group">
+          <label for="origen">Plataforma/Origen</label>
+          <select id="origen" onchange="toggleSubtipoTaisa()">
+            <option value="MECO">MECO</option>
+            <option value="Valencia">Valencia</option>
+            <option value="Torija">Torija</option>
+            <option value="Antequera">Antequera</option>
+            <option value="Taisa">Taisa</option>
+            <option value="Cesión">Cesión entre tiendas</option>
+          </select>
+        </div>
+
+        <div class="form-group subtipo-taisa" id="subtipoTaisaGroup">
+          <label for="subtipoTaisa">Subtipo Taisa</label>
+          <select id="subtipoTaisa">
+            <option value="Devolución">Devolución</option>
+            <option value="Inventario">Inventario</option>
+            <option value="Demarca">Demarca</option>
+            <option value="Petición Reserva">Petición Reserva</option>
+            <option value="Sobrante">Sobrante</option>
+            <option value="Ean Erroneo">Ean Erroneo</option>
+            <option value="Anulado">Anulado</option>
+            <option value="Rotura">Rotura</option>
+            <option value="Pedido cliente">Pedido cliente</option>
+          </select>
+        </div>
+
+        <div class="form-group subtipo-taisa" id="origenTiendaGroup">
+          <label for="origenTienda">Tienda origen (cesión)</label>
+          <select id="origenTienda">
+            <option value="Málaga">Málaga</option>
+            <option value="Marbella">Marbella</option>
+            <option value="Mijas">Mijas</option>
+            <option value="Granada">Granada</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="destino">Tienda Destino</label>
+          <select id="destino">
+            <option value="Málaga">Málaga</option>
+            <option value="Marbella">Marbella</option>
+            <option value="Mijas">Mijas</option>
+            <option value="Granada">Granada</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="razonFlujoGroup">
+          <label for="razonFlujo">Razón del flujo (opcional)</label>
+          <select id="razonFlujo">
+            <option value="">-- Ninguna --</option>
+            <option value="Sobrante">Sobrante</option>
+            <option value="Soporte No documentado cargado">Soporte No documentado cargado</option>
+            <option value="Anulado">Anulado</option>
+            <option value="Libre Servicio">Libre Servicio</option>
+          </select>
+        </div>
+
+        <button class="btn-primary" id="btnGenerar" onclick="generarLoteEtiquetas()">Generar Etiquetas del Lote</button>
+        <div class="aviso-error" id="avisoError"></div>
+
+        <div class="lista-pedidos">
+          <h3 style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span>Historial reciente</span>
+            <button type="button" class="btn-link" onclick="cargarHistorial()" title="Actualizar">Actualizar</button>
+          </h3>
+          <div id="historialPedidos"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Etiquetas Generadas</h2>
+        <div class="etiquetas-preview" id="etiquetasPreview">Genera un lote para ver aquí el resumen.</div>
+        <button class="btn-imprimir" id="btnImprimir" onclick="imprimirLote()" disabled>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Imprimir Lote (Zebra)
+        </button>
+      </div>
+
+      <div class="section" id="seccionContenido" style="display:none;">
+        <h2>Contenido de los soportes (opcional)</h2>
+        <p class="hint-texto">No afecta a la etiqueta impresa. Añade artículos/cantidades solo si hace falta — se podrá consultar en las búsquedas y en el informe de cierre.</p>
+        <div id="contenidoSoportes"></div>
+      </div>
+    </div>
+
+    <!-- ══════════ VISTA: BUSCADOR INTERNO ══════════ -->
+    <div id="vistaInterno" class="vista-oculta">
+      <div class="busqueda-form">
+        <div class="form-group"><label>Fecha</label><input type="date" id="internoFecha"></div>
+        <div class="form-group"><label>ID único</label><input type="text" id="internoIdUnico" placeholder="HODOS-000123"></div>
+        <div class="form-group"><label>Nº Pedido (uno o varios, uno por línea)</label><textarea id="internoNumeroPedido" rows="2" style="resize:vertical;" placeholder="111111&#10;222222&#10;333333"></textarea></div>
+        <div class="form-group"><label>Origen</label>
+          <select id="internoOrigen">
+            <option value="">Todos los orígenes</option>
+            <option value="MECO">MECO</option>
+            <option value="Valencia">Valencia</option>
+            <option value="Torija">Torija</option>
+            <option value="Antequera">Antequera</option>
+            <option value="Taisa">Taisa</option>
+            <option value="Cesión">Cesión entre tiendas</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Destino</label>
+          <select id="internoDestino">
+            <option value="">Todas las tiendas</option>
+            <option value="Málaga">Málaga</option>
+            <option value="Marbella">Marbella</option>
+            <option value="Mijas">Mijas</option>
+            <option value="Granada">Granada</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Estado</label>
+          <select id="internoEstado">
+            <option value="">Todos los estados</option>
+            <option value="REGISTRADO">Registrado</option>
+            <option value="EN_RUTA">En ruta</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Orden</label>
+          <select id="internoOrden">
+            <option value="desc">Más nueva primero</option>
+            <option value="asc">Más antigua primero</option>
+          </select>
+        </div>
+        <button onclick="buscarYMostrar('interno')">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Buscar
+        </button>
+        <button type="button" class="btn-secundario" onclick="agruparSeleccionadosUI_()" style="margin-left:8px;">
+          Agrupar seleccionados
+        </button>
+        <button type="button" class="btn-secundario" onclick="borrarSeleccionadosUI_()" style="margin-left:8px;">
+          Borrar seleccionados
+        </button>
+        <button type="button" class="btn-secundario" onclick="copiarResultadosUI_(this)" style="margin-left:8px;">
+          Copiar resultados
+        </button>
+      </div>
+      <div class="resultados-wrap"><div id="resultadosInterno"></div></div>
+    </div>
+
+    <!-- ══════════ VISTA: INCPC (pendientes de imprimir) ══════════ -->
+    <div id="vistaIncpc" class="vista-oculta">
+      <div class="busqueda-form">
+        <span id="contadorIncpc" class="hint-texto">Cargando…</span>
+        <button type="button" class="btn-imprimir" id="btnImprimirIncpc" onclick="imprimirTodasIncpc_()" disabled>
+          Imprimir todas
+        </button>
+        <button type="button" class="btn-secundario" onclick="agruparSeleccionadosUI_()" style="margin-left:8px;">
+          Agrupar seleccionados
+        </button>
+        <button type="button" class="btn-secundario" onclick="borrarSeleccionadosUI_()" style="margin-left:8px;">
+          Borrar seleccionados
+        </button>
+        <button type="button" class="btn-link" onclick="cargarIncpc_()" title="Actualizar">Actualizar</button>
+      </div>
+      <div class="resultados-wrap"><div id="resultadosIncpc"></div></div>
+    </div>
+
+    <!-- ══════════ VISTA: PREP. PEDIDOS (etiquetas de Preparación de Pedidos) ══════════ -->
+    <div id="vistaPreparacion" class="vista-oculta">
+      <div class="busqueda-form">
+        <span id="contadorPreparacion" class="hint-texto">Cargando…</span>
+        <button type="button" class="btn-imprimir" id="btnImprimirPreparacion" onclick="imprimirTodasPreparacion_()" disabled>
+          Imprimir todas
+        </button>
+        <button type="button" class="btn-secundario" onclick="agruparSeleccionadosUI_()" style="margin-left:8px;">
+          Agrupar seleccionados
+        </button>
+        <button type="button" class="btn-secundario" onclick="borrarSeleccionadosUI_()" style="margin-left:8px;">
+          Borrar seleccionados
+        </button>
+        <button type="button" class="btn-link" onclick="cargarPreparacion_()" title="Actualizar">Actualizar</button>
+      </div>
+      <div class="resultados-wrap"><div id="resultadosPreparacion"></div></div>
+    </div>
+
+    <!-- ══════════ VISTAS: ARRASTRES (Meco, Valencia, Torija, Antequera) ══════════
+         Etiquetas creadas por MacroArrastres. Las cuatro son idénticas salvo el
+         identificador: el JS las maneja con una sola función parametrizada
+         (ver ARRASTRES_ más abajo). -->
+    <div id="vistaMeco" class="vista-oculta">
+      <div class="busqueda-form">
+        <span id="contadorMeco" class="hint-texto">Cargando…</span>
+        <button type="button" class="btn-imprimir" id="btnImprimirMeco" onclick="imprimirTodasArrastre_('meco')" disabled>
+          Imprimir todas
+        </button>
+        <button type="button" class="btn-secundario" onclick="agruparSeleccionadosUI_()" style="margin-left:8px;">
+          Agrupar seleccionados
+        </button>
+        <button type="button" class="btn-secundario" onclick="borrarSeleccionadosUI_()" style="margin-left:8px;">
+          Borrar seleccionados
+        </button>
+        <button type="button" class="btn-link" onclick="cargarArrastre_('meco')" title="Actualizar">Actualizar</button>
+      </div>
+      <div class="resultados-wrap"><div id="resultadosMeco"></div></div>
+    </div>
+
+    <div id="vistaValencia" class="vista-oculta">
+      <div class="busqueda-form">
+        <span id="contadorValencia" class="hint-texto">Cargando…</span>
+        <button type="button" class="btn-imprimir" id="btnImprimirValencia" onclick="imprimirTodasArrastre_('valencia')" disabled>
+          Imprimir todas
+        </button>
+        <button type="button" class="btn-secundario" onclick="agruparSeleccionadosUI_()" style="margin-left:8px;">
+          Agrupar seleccionados
+        </button>
+        <button type="button" class="btn-secundario" onclick="borrarSeleccionadosUI_()" style="margin-left:8px;">
+          Borrar seleccionados
+        </button>
+        <button type="button" class="btn-link" onclick="cargarArrastre_('valencia')" title="Actualizar">Actualizar</button>
+      </div>
+      <div class="resultados-wrap"><div id="resultadosValencia"></div></div>
+    </div>
+
+    <div id="vistaTorija" class="vista-oculta">
+      <div class="busqueda-form">
+        <span id="contadorTorija" class="hint-texto">Cargando…</span>
+        <button type="button" class="btn-imprimir" id="btnImprimirTorija" onclick="imprimirTodasArrastre_('torija')" disabled>
+          Imprimir todas
+        </button>
+        <button type="button" class="btn-secundario" onclick="agruparSeleccionadosUI_()" style="margin-left:8px;">
+          Agrupar seleccionados
+        </button>
+        <button type="button" class="btn-secundario" onclick="borrarSeleccionadosUI_()" style="margin-left:8px;">
+          Borrar seleccionados
+        </button>
+        <button type="button" class="btn-link" onclick="cargarArrastre_('torija')" title="Actualizar">Actualizar</button>
+      </div>
+      <div class="resultados-wrap"><div id="resultadosTorija"></div></div>
+    </div>
+
+    <div id="vistaAntequera" class="vista-oculta">
+      <div class="busqueda-form">
+        <span id="contadorAntequera" class="hint-texto">Cargando…</span>
+        <button type="button" class="btn-imprimir" id="btnImprimirAntequera" onclick="imprimirTodasArrastre_('antequera')" disabled>
+          Imprimir todas
+        </button>
+        <button type="button" class="btn-secundario" onclick="agruparSeleccionadosUI_()" style="margin-left:8px;">
+          Agrupar seleccionados
+        </button>
+        <button type="button" class="btn-secundario" onclick="borrarSeleccionadosUI_()" style="margin-left:8px;">
+          Borrar seleccionados
+        </button>
+        <button type="button" class="btn-link" onclick="cargarArrastre_('antequera')" title="Actualizar">Actualizar</button>
+      </div>
+      <div class="resultados-wrap"><div id="resultadosAntequera"></div></div>
+    </div>
+
+    <!-- ══════════ VISTA: PENDIENTES (soportes vivos por tienda) ══════════ -->
+    <div id="vistaPendientes" class="vista-oculta">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+        <button type="button" class="btn-link" onclick="cargarPendientes_()" title="Actualizar">Actualizar</button>
+      </div>
+      <div id="pendientesTarjetas" class="pendientes-grid"></div>
+    </div>
+
+    <!-- ══════════ VISTA: CARGAR CAMIÓN ══════════ -->
+    <div id="vistaCamion" class="vista-oculta">
+      <div class="camion-stepper" id="camionStepper">
+        <div class="paso" data-paso="1"><div class="num">1</div><div class="etiqueta">Tienda y fecha</div></div>
+        <div class="linea"></div>
+        <div class="paso" data-paso="2"><div class="num">2</div><div class="etiqueta">Escanear</div></div>
+        <div class="linea"></div>
+        <div class="paso" data-paso="3"><div class="num">3</div><div class="etiqueta">Cerrar</div></div>
+      </div>
+      <div id="camionPaso1">
+        <label>Tienda destino</label>
+        <div class="tienda-selector" id="camionTiendaSelector">
+          <button type="button" class="tienda-btn tienda-malaga" data-tienda="Málaga" onclick="seleccionarTiendaCamion_('Málaga')">
+            <span class="tienda-check">✓</span><span class="tienda-dot"></span><span class="tienda-name">Málaga</span>
+          </button>
+          <button type="button" class="tienda-btn tienda-marbella" data-tienda="Marbella" onclick="seleccionarTiendaCamion_('Marbella')">
+            <span class="tienda-check">✓</span><span class="tienda-dot"></span><span class="tienda-name">Marbella</span>
+          </button>
+          <button type="button" class="tienda-btn tienda-mijas" data-tienda="Mijas" onclick="seleccionarTiendaCamion_('Mijas')">
+            <span class="tienda-check">✓</span><span class="tienda-dot"></span><span class="tienda-name">Mijas</span>
+          </button>
+          <button type="button" class="tienda-btn tienda-granada" data-tienda="Granada" onclick="seleccionarTiendaCamion_('Granada')">
+            <span class="tienda-check">✓</span><span class="tienda-dot"></span><span class="tienda-name">Granada</span>
+          </button>
+        </div>
+        <div class="busqueda-form">
+        <div class="form-group">
+          <label>Fecha de entrega</label>
+          <div class="fecha-chips" id="camionFechaChips"></div>
+          <input type="date" id="camionFecha" class="vista-oculta" style="margin-top:8px;">
+        </div>
+        <div class="form-group"><label>Horario</label><select id="camionHorario"></select></div>
+        <button onclick="crearCargaUI()">Abrir carga</button>
+        </div>
+      </div>
+
+      <div id="camionPaso2" class="vista-oculta">
+        <div class="section" style="margin-bottom:20px;">
+          <h2 id="camionTitulo"></h2>
+          <div id="camionBadgePrueba" class="vista-oculta" style="display:inline-block;background:#e30613;color:#fff;font-size:11px;font-weight:700;letter-spacing:0.5px;padding:4px 10px;border-radius:4px;margin-bottom:12px;">MODO PRUEBA — no se enviará ningún email al cerrar</div>
+          <div class="form-group">
+            <label>Escanea aquí (lector de código de barras)</label>
+            <div style="display:flex;gap:8px;align-items:stretch;">
+              <input type="text" id="camionEscaneo" autocomplete="off" placeholder="Esperando lectura..." style="flex:1;">
+              <button type="button" class="btn-secundario btn-modo-manual" id="btnModoManual" onclick="toggleModoManual_()" style="white-space:nowrap;">⌨ Introducir a mano</button>
+              <button type="button" class="btn-secundario vista-oculta" id="btnAnadirManual" onclick="procesarEscaneo_(camionEscaneoInput_)" style="white-space:nowrap;">Añadir</button>
+            </div>
+          </div>
+          <div id="camionAviso"></div>
+        </div>
+        <div class="tabla-titulo"><span class="badge-origen badge-origen-hodos">HODOS</span><span>Pedidos cliente</span><span class="tabla-contador" id="contadorPedidos"></span></div>
+        <div class="resultados-wrap"><div id="camionLista"></div></div>
+        <div class="tabla-titulo tabla-titulo-sie vista-oculta" id="tituloListaPalets"><span class="badge-origen badge-origen-sie">SIE</span><span>Palets refill</span><span class="tabla-contador" id="contadorPalets"></span></div>
+        <div class="resultados-wrap vista-oculta" id="wrapListaPalets"><div id="camionListaPalets"></div></div>
+        <button class="btn-primary" id="btnCerrarCarga" style="margin-top:16px;" onclick="cerrarCargaUI()">Cerrar carga</button>
+      </div>
+
+      <div id="camionPaso3" class="vista-oculta">
+        <div class="section">
+          <h2>Carga cerrada</h2>
+          <div id="camionResumen"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ VISTA: BUSCADOR TIENDA ══════════ -->
+    <div id="vistaTienda" class="vista-oculta">
+      <h2 id="tituloTienda" style="margin-bottom:16px; color:var(--color-accent-text);"></h2>
+      <div class="busqueda-form">
+        <div class="form-group"><label>Fecha</label><input type="date" id="tiendaFecha"></div>
+        <div class="form-group"><label>ID único</label><input type="text" id="tiendaIdUnico" placeholder="HODOS-000123"></div>
+        <div class="form-group"><label>Nº Pedido</label><input type="text" id="tiendaNumeroPedido"></div>
+        <button onclick="buscarYMostrar('tienda')">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Buscar
+        </button>
+      </div>
+      <div class="resultados-wrap"><div id="resultadosTienda"></div></div>
+    </div>
+  </main>
+</div>
+
+<!-- Mensaje centrado (reemplaza al alert() nativo) para avisos que necesitan
+     listar varias líneas con claridad, p.ej. qué soportes faltan por cargar. -->
+<div id="modalAviso" class="modal-overlay vista-oculta" onclick="if (event.target === this) cerrarModalAviso_();">
+  <div class="modal-caja">
+    <h3 id="modalAvisoTitulo">Aviso</h3>
+    <p id="modalAvisoTexto"></p>
+    <button type="button" class="btn-primary" onclick="cerrarModalAviso_()">Entendido</button>
+  </div>
+</div>
+
+<!-- Diálogo de confirmación propio: sustituye a confirm() nativo, que en el navegador
+     de HODOS (WebView de Apps Script) se muestra como un aviso feo del navegador con la
+     URL interna de googleusercontent.com — mismo look que el resto de modales de la app. -->
+<div id="modalConfirmar" class="modal-overlay vista-oculta" onclick="if (event.target === this) cerrarModalConfirmar_();">
+  <div class="modal-caja">
+    <h3 id="modalConfirmarTitulo">Confirmar</h3>
+    <p id="modalConfirmarTexto" style="white-space:pre-wrap;"></p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button type="button" class="btn-secundario" onclick="cerrarModalConfirmar_()">Cancelar</button>
+      <button type="button" class="btn-primary" id="modalConfirmarBtnOk">Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Panel de carga masiva (Cargar camión) — se abre solo con un gesto que no está
+     documentado en ningún sitio de la propia pantalla (mantener pulsado el título de la
+     carga 2s), a propósito, para que no sea un botón visible de uso habitual. -->
+<div id="modalCargaMasiva" class="modal-overlay vista-oculta" onclick="if (event.target === this) cerrarModalCargaMasiva_();">
+  <div class="modal-caja" style="max-width:600px;">
+    <h3 style="color:var(--color-accent-text);">Añadir varios soportes pendientes</h3>
+    <p style="font-size:13px;opacity:0.85;margin-bottom:14px;">Estos soportes se marcarán como cargados sin necesidad de escanearlos.</p>
+    <div style="margin-bottom:10px;">
+      <label style="display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:13px;">
+        <input type="checkbox" id="chkSeleccionarTodosMasiva" onchange="toggleSeleccionarTodosMasiva_(this)"> Seleccionar todos
+      </label>
+    </div>
+    <div id="listaCargaMasiva" style="max-height:320px;overflow-y:auto;margin-bottom:16px;"></div>
+    <div style="display:flex;gap:10px;">
+      <button type="button" class="btn-secundario" onclick="cerrarModalCargaMasiva_()" style="flex:1;">Cancelar</button>
+      <button type="button" class="btn-primary" style="flex:1;margin-top:0;" onclick="aplicarCargaMasiva_()">Añadir seleccionados</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var VISTA = '<?= vista ?>';
+  var TIENDA_FILTRO = '<?= tiendaFiltro ?>';
+  var FECHA_CONTEXTO = '<?= fechaContexto ?>';
+  var HORARIO_CONTEXTO = '<?= horarioContexto ?>';
+  var loteActualId = null;
+
+  function gas(nombreFuncion) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(function (err) { reject(err); })
+        [nombreFuncion].apply(null, args);
+    });
+  }
+
+  function toggleSubtipoTaisa() {
+    var origen = document.getElementById('origen').value;
+    document.getElementById('subtipoTaisaGroup').classList.toggle('visible', origen === 'Taisa');
+    document.getElementById('origenTiendaGroup').classList.toggle('visible', origen === 'Cesión');
+    // La razón del flujo no aplica a Taisa (esos motivos ya los cubre su subtipo) —
+    // se oculta y se limpia para que no quede un valor invisible listo para colarse
+    // si el operario vuelve a cambiar de origen sin darse cuenta.
+    var razonFlujoGroup = document.getElementById('razonFlujoGroup');
+    razonFlujoGroup.style.display = origen === 'Taisa' ? 'none' : '';
+    if (origen === 'Taisa') document.getElementById('razonFlujo').value = '';
+  }
+
+  document.getElementById('listaPedidos').addEventListener('input', function () {
+    var lineas = this.value.split('\n').filter(function (l) { return l.trim() !== ''; });
+    document.getElementById('contadorPedidos').textContent = lineas.length + ' pedido' + (lineas.length !== 1 ? 's' : '') + ' detectado' + (lineas.length !== 1 ? 's' : '');
+  });
+
+  var TEMAS_ORDEN_ = ['black', 'vivid', 'gray'];
+
+  function aplicarTema_(tema) {
+    document.body.className = 'tema-' + tema;
+    var btn = document.getElementById('temaToggleBtn');
+    btn.className = 'tema-toggle-btn tema-toggle-' + tema;
+    localStorage.setItem('hodosTema', tema);
+  }
+
+  function cambiarTema() {
+    var actual = TEMAS_ORDEN_.filter(function (t) { return document.body.classList.contains('tema-' + t); })[0] || 'black';
+    var siguiente = TEMAS_ORDEN_[(TEMAS_ORDEN_.indexOf(actual) + 1) % TEMAS_ORDEN_.length];
+    aplicarTema_(siguiente);
+  }
+
+  function resumenPorPedido_(items) {
+    // Antes se listaban todos los IDs únicos separados por comas: con lotes grandes
+    // eso generaba una única línea enorme, difícil de leer. Se agrupa por número de
+    // pedido y solo se muestra el recuento de soportes, que es lo que hace falta ver
+    // de un vistazo tras generar el lote.
+    var mapa = {};
+    var orden = [];
+    items.forEach(function (it) {
+      if (!mapa[it.numeroPedido]) { mapa[it.numeroPedido] = 0; orden.push(it.numeroPedido); }
+      mapa[it.numeroPedido]++;
+    });
+    return orden.map(function (np) { return { numeroPedido: np, soportes: mapa[np] }; });
+  }
+
+  function generarLoteEtiquetas() {
+    var pedidosTexto = document.getElementById('listaPedidos').value;
+    var origen = document.getElementById('origen').value;
+    var subtipo = origen === 'Taisa' ? document.getElementById('subtipoTaisa').value : '';
+    var origenTienda = origen === 'Cesión' ? document.getElementById('origenTienda').value : '';
+    var destino = document.getElementById('destino').value;
+    var razonFlujo = origen === 'Taisa' ? '' : document.getElementById('razonFlujo').value;
+    var btn = document.getElementById('btnGenerar');
+    var aviso = document.getElementById('avisoError');
+    aviso.textContent = '';
+    if (origen === 'Cesión' && origenTienda === destino) {
+      aviso.textContent = 'La tienda de origen y destino de la cesión no pueden ser la misma';
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = 'Registrando...';
+
+    gas('registrarLote', { pedidosTexto: pedidosTexto, origen: origen, subtipo: subtipo, destino: destino, origenTienda: origenTienda, razonFlujo: razonFlujo })
+      .then(function (resultado) {
+        loteActualId = resultado.loteId;
+        document.getElementById('etiquetasPreview').innerHTML =
+          '<strong>' + resultado.cantidad + ' etiquetas generadas</strong>' +
+          '<div class="etiquetas-resumen-lista">' +
+          resumenPorPedido_(resultado.items).map(function (rp) {
+            return '<div>' + escapeHtml_(rp.numeroPedido) + ' — ' + rp.soportes + ' soporte' + (rp.soportes !== 1 ? 's' : '') + '</div>';
+          }).join('') +
+          '</div>';
+        document.getElementById('btnImprimir').disabled = false;
+        renderizarContenidoSoportes_(resultado.items);
+        cargarHistorial();
+        // Deja lista la caja de pedidos para seguir bipando/pegando el siguiente lote
+        // sin tener que borrar nada a mano.
+        document.getElementById('listaPedidos').value = '';
+        document.getElementById('contadorPedidos').textContent = '0 pedidos detectados';
+        // La razón del flujo es una excepción puntual del lote (Sobrante/No documentado),
+        // no algo que deba arrastrarse sin querer al siguiente lote normal.
+        document.getElementById('razonFlujo').value = '';
+        document.getElementById('listaPedidos').focus();
+      })
+      .catch(function (err) {
+        aviso.textContent = 'Error: ' + (err && err.message ? err.message : err);
+      })
+      .then(function () {
+        btn.disabled = false;
+        btn.textContent = 'Generar Etiquetas del Lote';
+      });
+  }
+
+  function renderizarContenidoSoportes_(items) {
+    var seccion = document.getElementById('seccionContenido');
+    var cont = document.getElementById('contenidoSoportes');
+    if (!items || items.length === 0) {
+      seccion.style.display = 'none';
+      cont.innerHTML = '';
+      return;
+    }
+    seccion.style.display = '';
+    cont.innerHTML = items.map(function (it) {
+      var soporte = it.soporteTotal > 1 ? (' (' + it.soporteNum + '/' + it.soporteTotal + ')') : '';
+      return '<div class="contenido-item">' +
+        '<div class="contenido-item-header">' +
+        '<span>' + it.idUnico + ' — ' + escapeHtml_(it.numeroPedido) + soporte + '</span>' +
+        '<button type="button" class="btn-link" onclick="toggleContenidoItem_(\'' + it.idUnico + '\')">+ Añadir contenido</button>' +
+        '</div>' +
+        '<div class="contenido-item-body vista-oculta" id="contenidoBody-' + it.idUnico + '">' +
+        '<div class="contenido-lineas" id="contenidoLineas-' + it.idUnico + '"></div>' +
+        '<button type="button" class="btn-secundario" onclick="agregarLineaContenido_(\'' + it.idUnico + '\')">+ línea</button> ' +
+        '<button type="button" class="btn-secundario" onclick="guardarContenidoUI_(\'' + it.idUnico + '\')">Guardar</button>' +
+        '<span class="contenido-estado" id="contenidoEstado-' + it.idUnico + '"></span>' +
+        '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  function toggleContenidoItem_(idUnico) {
+    var body = document.getElementById('contenidoBody-' + idUnico);
+    var estabaOculto = body.classList.contains('vista-oculta');
+    body.classList.toggle('vista-oculta');
+    if (estabaOculto && document.getElementById('contenidoLineas-' + idUnico).children.length === 0) {
+      agregarLineaContenido_(idUnico);
+    }
+  }
+
+  function agregarLineaContenido_(idUnico) {
+    var cont = document.getElementById('contenidoLineas-' + idUnico);
+    var fila = document.createElement('div');
+    fila.className = 'contenido-linea';
+    fila.innerHTML =
+      '<input type="text" placeholder="Descripción" class="contenido-descripcion">' +
+      '<input type="number" placeholder="Cantidad" class="contenido-cantidad" min="0">' +
+      '<button type="button" class="btn-link" onclick="this.parentElement.remove()">✕</button>';
+    cont.appendChild(fila);
+  }
+
+  function guardarContenidoUI_(idUnico) {
+    var lineas = document.getElementById('contenidoLineas-' + idUnico).querySelectorAll('.contenido-linea');
+    var items = Array.prototype.map.call(lineas, function (fila) {
+      return {
+        descripcion: fila.querySelector('.contenido-descripcion').value,
+        cantidad: fila.querySelector('.contenido-cantidad').value
+      };
+    });
+    var estado = document.getElementById('contenidoEstado-' + idUnico);
+    estado.textContent = 'Guardando...';
+    gas('guardarContenidoSoporte', idUnico, items).then(function (r) {
+      estado.textContent = r.cantidad > 0 ? (r.cantidad + ' línea(s) guardadas.') : 'Contenido vaciado.';
+    }).catch(function (err) {
+      estado.textContent = 'Error: ' + (err && err.message ? err.message : err);
+    });
+  }
+
+  function esperarRenderizadoParaImprimir_(ventana, callback) {
+    // Sustituye el margen fijo de 250ms (lección de robot-ubicacion-pyxis/App.html):
+    // con lotes grandes, pintar muchas copias del logo embebido + maquetar/paginar
+    // todas las etiquetas puede tardar más que eso, y llamar a print() demasiado
+    // pronto es una causa probable de las etiquetas que salen descuadradas de forma
+    // intermitente (más fácil de reproducir cuantas más etiquetas tiene el lote). Se
+    // espera de verdad a que carguen todas las imágenes y a dos frames de rAF para
+    // que el motor de layout asiente, con un tope máximo por si algo no llega a
+    // disparar 'load'/'error'.
+    var doc = ventana.document;
+    var imgs = doc.images ? Array.prototype.slice.call(doc.images) : [];
+    var pendientes = imgs.filter(function (img) { return !img.complete; }).length;
+    var tope = setTimeout(listo, 2000 + imgs.length * 20);
+
+    function listo() {
+      clearTimeout(tope);
+      ventana.requestAnimationFrame(function () {
+        ventana.requestAnimationFrame(callback);
+      });
+    }
+
+    if (pendientes === 0) { listo(); return; }
+    function comprobar() {
+      pendientes--;
+      if (pendientes <= 0) listo();
+    }
+    imgs.forEach(function (img) {
+      if (img.complete) return;
+      img.addEventListener('load', comprobar, { once: true });
+      img.addEventListener('error', comprobar, { once: true });
+    });
+  }
+
+  function imprimirEnMarcoOculto_(html) {
+    // Fallback si el navegador bloqueó la ventana emergente (lección de
+    // lm_produccion/Index.html): imprime desde un iframe oculto en vez de una
+    // pestaña nueva, sin depender de que el popup se haya podido abrir.
+    var ifr = document.createElement('iframe');
+    ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    document.body.appendChild(ifr);
+    ifr.contentDocument.open();
+    ifr.contentDocument.write(html);
+    ifr.contentDocument.close();
+    esperarRenderizadoParaImprimir_(ifr.contentWindow, function () {
+      try {
+        ifr.contentWindow.focus();
+        ifr.contentWindow.print();
+      } catch (e) {
+        alert('No se pudo imprimir: ' + e.message);
+      }
+      setTimeout(function () { document.body.removeChild(ifr); }, 1000);
+    });
+  }
+
+  function imprimirHtmlEtiquetas_(promesaHtml) {
+    // Compartido entre imprimirLote (todo el lote) y reimprimirEtiquetaUI_ (una sola
+    // etiqueta desde el Buscador Interno) — mismo flujo de ventana/fallback/espera de
+    // renderizado, solo cambia qué función del servidor genera el HTML.
+    var ventana = window.open('', '_blank');
+    if (ventana) {
+      ventana.document.write('Generando etiquetas...');
+    }
+    return promesaHtml
+      .then(function (html) {
+        if (ventana && !ventana.closed) {
+          ventana.document.open();
+          ventana.document.write(html);
+          ventana.document.close();
+          esperarRenderizadoParaImprimir_(ventana, function () {
+            ventana.focus();
+            ventana.print();
+          });
+        } else {
+          // window.open() devolvió null/fue bloqueado por el navegador.
+          imprimirEnMarcoOculto_(html);
+        }
+      })
+      .catch(function (err) {
+        var mensaje = 'Error al generar etiquetas: ' + (err && err.message ? err.message : err);
+        if (ventana && !ventana.closed) {
+          ventana.document.open();
+          ventana.document.write(mensaje);
+          ventana.document.close();
+        } else {
+          alert(mensaje);
+        }
+      });
+  }
+
+  function imprimirLote() {
+    if (!loteActualId) return;
+    imprimirHtmlEtiquetas_(gas('htmlEtiquetas', loteActualId));
+  }
+
+  function reimprimirEtiquetaUI_(idUnico) {
+    imprimirHtmlEtiquetas_(gas('htmlEtiquetaUnica', idUnico));
+  }
+
+  function imprimirPendientesTienda_(tienda) {
+    // Informe A4 (no la etiqueta Zebra 100x150mm) con todos los soportes REGISTRADO
+    // de esa tienda — mismo flujo de ventana/espera de imprimirHtmlEtiquetas_, solo
+    // cambia el HTML que genera el servidor.
+    imprimirHtmlEtiquetas_(gas('htmlPendientesTienda', tienda));
+  }
+
+  function cargarHistorial() {
+    gas('obtenerHistorialLotes', 10).then(function (lotes) {
+      var cont = document.getElementById('historialPedidos');
+      if (!lotes || lotes.length === 0) {
+        cont.innerHTML = '<p class="sin-resultados">Sin lotes recientes.</p>';
+        return;
+      }
+      cont.innerHTML = lotes.map(function (l) {
+        return '<div class="pedido-item"><span><strong>' + l.cantidad + ' pedidos</strong> | ' + escapeHtml_(l.origenTexto) + ' &rarr; ' + escapeHtml_(l.destino) + '</span></div>';
+      }).join('');
+    }).catch(function (err) {
+      console.error('obtenerHistorialLotes error:', err);
+    });
+  }
+
+  function formatearAntiguedad_(horas) {
+    if (horas < 1) return Math.round(horas * 60) + ' min';
+    if (horas < 24) return (Math.round(horas * 10) / 10) + ' h';
+    var dias = Math.floor(horas / 24);
+    var resto = Math.round(horas - dias * 24);
+    return dias + 'd ' + resto + 'h';
+  }
+
+  function cargarPendientes_() {
+    var cont = document.getElementById('pendientesTarjetas');
+    cont.innerHTML = '<p class="cargando-resultados">Cargando…</p>';
+    gas('obtenerPendientesPorTienda').then(function (grupos) {
+      cont.innerHTML = grupos.map(function (g) {
+        var filas = g.pendientes.map(function (p) {
+          var soporte = p.soporteTotal > 1 ? (' (' + p.soporteNum + '/' + p.soporteTotal + ')') : '';
+          var nivel = p.nivelAviso || (p.alerta ? 'rojo' : 'ok');
+          return '<tr>' +
+            '<td data-label="Pedido">' + escapeHtml_(p.numeroPedido) + soporte + '<span class="pendientes-id-unico">' + escapeHtml_(p.idUnico) + '</span></td>' +
+            '<td data-label="Origen">' + escapeHtml_(p.origenTexto) + (p.razonFlujo ? ' <span class="badge-razon-flujo">' + escapeHtml_(p.razonFlujo) + '</span>' : '') + '</td>' +
+            '<td data-label="Antigüedad"><span class="badge-nivel badge-nivel-' + nivel + '">' + formatearAntiguedad_(p.horasTranscurridas) + '</span></td>' +
+            '</tr>';
+        }).join('');
+        var cuerpo = g.pendientes.length === 0
+          ? '<p class="sin-resultados">Sin soportes pendientes.</p>'
+          : '<div class="pendientes-tabla-wrap"><table class="resultados-tabla"><thead><tr><th>Pedido</th><th>Origen</th><th>Antigüedad</th></tr></thead><tbody>' + filas + '</tbody></table></div>';
+        var badgeAlerta = g.totalAlertas > 0
+          ? ' · <span class="pendientes-alerta-badge">' + g.totalAlertas + ' con aviso</span>'
+          : '';
+        return '<div class="section">' +
+          '<h2 style="display:flex;align-items:center;justify-content:space-between;gap:12px;">' +
+            '<span>' + g.tienda + '<span class="pendientes-contador">' + g.pendientes.length + ' pendiente' + (g.pendientes.length !== 1 ? 's' : '') + badgeAlerta + '</span></span>' +
+            '<button type="button" class="btn-secundario" onclick="imprimirPendientesTienda_(\'' + g.tienda + '\')">' +
+              '<svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;vertical-align:-2px;"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>' +
+              ' Imprimir silueta' +
+            '</button>' +
+          '</h2>' +
+          cuerpo +
+          '</div>';
+      }).join('');
+    }).catch(function (err) {
+      cont.innerHTML = '<p class="sin-resultados" style="color:var(--color-error);">Error al cargar pendientes: ' + (err && err.message ? err.message : err) + '</p>';
+    });
+  }
+
+  function cargarIncpc_() {
+    document.getElementById('resultadosIncpc').innerHTML = '<p class="cargando-resultados">Cargando…</p>';
+    gas('obtenerEtiquetasPendientesIncpc').then(function (filas) {
+      document.getElementById('btnImprimirIncpc').disabled = !filas || filas.length === 0;
+      document.getElementById('contadorIncpc').textContent =
+        (filas ? filas.length : 0) + ' etiqueta(s) de INCPC pendiente(s) de imprimir';
+      // Mismo caché que usa buscarYMostrar('interno') — editarSoporteUI_ lo lee por
+      // idUnico sin importar desde qué pestaña se abrió la edición.
+      ultimosResultadosInterno_ = filas;
+      renderizarResultados('resultadosIncpc', filas);
+    }).catch(function (err) {
+      document.getElementById('resultadosIncpc').innerHTML =
+        '<p class="sin-resultados" style="color:var(--color-error);">Error al cargar: ' + (err && err.message ? err.message : err) + '</p>';
+    });
+  }
+
+  function imprimirTodasIncpc_() {
+    gas('htmlPendientesIncpc').then(function (html) {
+      imprimirHtmlEtiquetas_(Promise.resolve(html));
+      return gas('marcarImpresasIncpc');
+    }).then(function () {
+      cargarIncpc_();
+    }).catch(function (err) {
+      alert('Error al imprimir: ' + (err && err.message ? err.message : err));
+    });
+  }
+
+  function cargarPreparacion_() {
+    document.getElementById('resultadosPreparacion').innerHTML = '<p class="cargando-resultados">Cargando…</p>';
+    gas('obtenerEtiquetasPendientesPreparacion').then(function (filas) {
+      document.getElementById('btnImprimirPreparacion').disabled = !filas || filas.length === 0;
+      document.getElementById('contadorPreparacion').textContent =
+        (filas ? filas.length : 0) + ' etiqueta(s) de Preparación de Pedidos pendiente(s) de imprimir';
+      ultimosResultadosInterno_ = filas;
+      renderizarResultados('resultadosPreparacion', filas);
+    }).catch(function (err) {
+      document.getElementById('resultadosPreparacion').innerHTML =
+        '<p class="sin-resultados" style="color:var(--color-error);">Error al cargar: ' + (err && err.message ? err.message : err) + '</p>';
+    });
+  }
+
+  function imprimirTodasPreparacion_() {
+    gas('htmlPendientesPreparacion').then(function (html) {
+      imprimirHtmlEtiquetas_(Promise.resolve(html));
+      return gas('marcarImpresasPreparacion');
+    }).then(function () {
+      cargarPreparacion_();
+    }).catch(function (err) {
+      alert('Error al imprimir: ' + (err && err.message ? err.message : err));
+    });
+  }
+
+  // Las cuatro pestañas de arrastres comparten toda la lógica: solo cambian el
+  // identificador del DOM y el valor de "origen" que espera el backend.
+  var ARRASTRES_ = {
+    // Grafías EXACTAS de la columna `origen` en Supabase (comprobado contra producción,
+    // 2026-09-07): "MECO" en mayúsculas, las otras tres solo con la inicial en
+    // mayúscula, igual que <option value="Valencia"> más arriba en este archivo.
+    meco:      { origen: 'MECO',      titulo: 'Meco',      sufijo: 'Meco' },
+    valencia:  { origen: 'Valencia',  titulo: 'Valencia',  sufijo: 'Valencia' },
+    torija:    { origen: 'Torija',    titulo: 'Torija',    sufijo: 'Torija' },
+    antequera: { origen: 'Antequera', titulo: 'Antequera', sufijo: 'Antequera' }
+  };
+
+  function cargarArrastre_(tab) {
+    var cfg = ARRASTRES_[tab];
+    document.getElementById('resultados' + cfg.sufijo).innerHTML = '<p class="cargando-resultados">Cargando…</p>';
+    gas('obtenerEtiquetasPendientesArrastre', cfg.origen).then(function (filas) {
+      document.getElementById('btnImprimir' + cfg.sufijo).disabled = !filas || filas.length === 0;
+      document.getElementById('contador' + cfg.sufijo).textContent =
+        (filas ? filas.length : 0) + ' etiqueta(s) de ' + cfg.titulo + ' pendiente(s) de imprimir';
+      ultimosResultadosInterno_ = filas;
+      renderizarResultados('resultados' + cfg.sufijo, filas);
+    }).catch(function (err) {
+      document.getElementById('resultados' + cfg.sufijo).innerHTML =
+        '<p class="sin-resultados" style="color:var(--color-error);">Error al cargar: ' + (err && err.message ? err.message : err) + '</p>';
+    });
+  }
+
+  function imprimirTodasArrastre_(tab) {
+    var cfg = ARRASTRES_[tab];
+    gas('htmlPendientesArrastre', cfg.origen).then(function (html) {
+      imprimirHtmlEtiquetas_(Promise.resolve(html));
+      return gas('marcarImpresasArrastre', cfg.origen);
+    }).then(function () {
+      cargarArrastre_(tab);
+    }).catch(function (err) {
+      alert('Error al imprimir: ' + (err && err.message ? err.message : err));
+    });
+  }
+
+  function formatearFecha(valor) {
+    if (!valor) return '';
+    var d = new Date(valor);
+    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+  }
+
+  function formatearFechaHora(valor) {
+    if (!valor) return '';
+    var d = new Date(valor);
+    return formatearFecha(valor) + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  // Bug real (2026-09-23, revisión de seguridad): numeroPedido/origenTexto/destino/
+  // contenido llegan de un pegado libre del operario (parsearLotePedidos solo hace
+  // trim(), sin sanear HTML) y se insertaban sin escapar vía innerHTML en
+  // renderizarResultados/cargarPendientes_/editarSoporteUI_ — XSS almacenado: pegar
+  // '<img src=x onerror=...>' como línea de pedido lo ejecuta en la sesión de
+  // cualquiera que abra el Buscador Interno o la vista=tienda. El servidor ya escapa
+  // (esc_ en Backend.gs) para etiquetas/PDF/email, pero eso no protege la UI web
+  // interactiva. Toda variable de datos (no literales fijos como r.estado) que se
+  // interpole en un innerHTML de este archivo debe pasar por aquí.
+  function escapeHtml_(valor) {
+    return String(valor == null ? '' : valor)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // "En ruta" se queda así para siempre aunque el camión ya haya llegado — el estado
+  // real en Supabase no cambia solo por el paso del tiempo (nadie confirma la llegada
+  // a mano). Esto es solo una etiqueta calculada para lo que se ve en pantalla: si ya
+  // ha pasado la fecha+hora de entrega de la carga, se muestra "Entregado" en vez de
+  // "En ruta", sin tocar el dato real. No es un reloj en vivo — si se deja la
+  // pantalla abierta mucho rato, hay que volver a buscar para que se recalcule.
+  function estadoMostrado_(r) {
+    if (r.estado === 'REGISTRADO') return 'Registrado';
+    if (r.estado !== 'EN_RUTA' || !r.fechaLlegada) return r.estado;
+    var horaMatch = /^(\d{1,2}):(\d{2})$/.exec(r.horarioLlegada || '');
+    var fechaEntregaCompleta = new Date(r.fechaLlegada);
+    if (horaMatch) {
+      fechaEntregaCompleta.setHours(parseInt(horaMatch[1], 10), parseInt(horaMatch[2], 10), 0, 0);
+    } else {
+      // Horario sin hora concreta (p.ej. "Envío único diario" de Granada): se asume
+      // entregado al final del día de la fecha de entrega.
+      fechaEntregaCompleta.setHours(23, 59, 0, 0);
+    }
+    return new Date() >= fechaEntregaCompleta ? 'Entregado' : 'En ruta';
+  }
+
+  function renderizarResultados(contenedorId, resultados) {
+    var cont = document.getElementById(contenedorId);
+    if (!resultados || resultados.length === 0) {
+      cont.innerHTML = '<p class="sin-resultados">Sin resultados.</p>';
+      return;
+    }
+    // resultadosIncpc reutiliza exactamente el mismo renderizado "interno" (checkbox,
+    // columnas Destino/Estado, acciones Reimprimir/Editar/Borrar) — así la pestaña
+    // INCPC no duplica ese mecanismo, solo cambia de dónde vienen los datos.
+    var esInterno = contenedorId === 'resultadosInterno' || contenedorId === 'resultadosIncpc' || contenedorId === 'resultadosPreparacion'
+      || contenedorId === 'resultadosMeco' || contenedorId === 'resultadosValencia' || contenedorId === 'resultadosTorija' || contenedorId === 'resultadosAntequera';
+    var cabeceraSeleccion = esInterno
+      ? '<th><input type="checkbox" title="Seleccionar todos" onchange="toggleSeleccionarTodo_(this)"></th>'
+      : '';
+    var cabeceraExtra = esInterno ? '<th>Destino</th><th>Estado</th>' : '';
+    var cabeceraAcciones = esInterno ? '<th>Acciones</th>' : '';
+    var filas = resultados.map(function (r) {
+      var soporte = r.soporteTotal > 1 ? (r.soporteNum + '/' + r.soporteTotal) : '—';
+      // "Cargado" = instante real en que se escaneó el soporte en el camión.
+      // "Llegó" = fecha+hora de entrega en tienda que ELEGIMOS al crear la carga (no un
+      // escaneo de llegada real, ver CLAUDE.md).
+      var cargado = r.bateaId ? formatearFechaHora(r.fechaCargado) : '—';
+      var llego = r.bateaId
+        ? (formatearFecha(r.fechaLlegada) + (r.horarioLlegada ? ' ' + r.horarioLlegada : ''))
+        : 'Pendiente';
+      var contenido = (r.contenido && r.contenido.length > 0)
+        ? r.contenido.map(function (c) { return c.cantidad + 'x ' + c.descripcion; }).join(', ')
+        : '—';
+      var estadoTexto = estadoMostrado_(r);
+      var extra = esInterno
+        ? ('<td data-label="Destino">' + escapeHtml_(r.destino) + '</td><td data-label="Estado">' +
+            (estadoTexto === 'Entregado' ? '<span class="badge-nivel badge-nivel-ok">Entregado</span>' : escapeHtml_(estadoTexto)) + '</td>')
+        : '';
+      // Reimprimir es de solo lectura (no cambia nada en Supabase) y vale para
+      // cualquier estado. Borrar/editar/seleccionar para borrado masivo solo tiene
+      // sentido mientras el soporte sigue REGISTRADO (no cargado aún en ningún
+      // camión) — ver borrarSoporteAdmin/actualizarSoporteAdmin en Backend.gs, que
+      // aplican la misma guarda en servidor.
+      var seleccion = esInterno
+        ? ('<td data-label="Sel."><input type="checkbox" class="chk-soporte" value="' + r.idUnico + '"' +
+            (r.estado === 'REGISTRADO' ? '' : ' disabled') + '></td>')
+        : '';
+      var acciones = esInterno
+        ? ('<td data-label="Acciones">' +
+            '<button type="button" class="btn-link" onclick="reimprimirEtiquetaUI_(\'' + r.idUnico + '\')">Reimprimir</button> ' +
+            (r.estado === 'REGISTRADO'
+              ? '<button type="button" class="btn-link" onclick="editarSoporteUI_(\'' + r.idUnico + '\')">Editar</button> ' +
+                '<button type="button" class="btn-link" onclick="borrarSoporteUI_(\'' + r.idUnico + '\')">Borrar</button>'
+              : '') + '</td>')
+        : '';
+      return '<tr data-idunico="' + escapeHtml_(r.idUnico) + '">' +
+        seleccion +
+        '<td data-label="Nº Pedido">' + escapeHtml_(r.numeroPedido) + '</td>' +
+        '<td data-label="Soporte">' + soporte + '</td>' +
+        '<td data-label="Origen">' + escapeHtml_(r.origenTexto) + (r.razonFlujo ? ' <span class="badge-razon-flujo">' + escapeHtml_(r.razonFlujo) + '</span>' : '') + '</td>' +
+        extra +
+        '<td data-label="ID único">' + escapeHtml_(r.idUnico) + '</td>' +
+        '<td data-label="Creado">' + formatearFechaHora(r.fechaCreacion) + '</td>' +
+        '<td data-label="Cargado">' + cargado + '</td>' +
+        '<td data-label="Llegó" class="' + (r.bateaId ? 'batea-ok' : 'batea-pendiente') + '">' + llego + '</td>' +
+        '<td data-label="Contenido">' + escapeHtml_(contenido) + '</td>' +
+        acciones +
+        '</tr>';
+    }).join('');
+    cont.innerHTML = '<table class="resultados-tabla"><thead><tr>' + cabeceraSeleccion + '<th>Nº Pedido</th><th>Soporte</th><th>Origen</th>' +
+      cabeceraExtra + '<th>ID único</th><th>Creado</th><th>Cargado</th><th>Llegó</th><th>Contenido</th>' + cabeceraAcciones + '</tr></thead><tbody>' + filas + '</tbody></table>';
+  }
+
+  // ── Administración: borrar/editar un soporte desde el Buscador Interno (solo
+  // mientras siga REGISTRADO — Backend.gs aplica la misma guarda en servidor) ──
+  var ultimosResultadosInterno_ = [];
+  var OPCIONES_ORIGEN_ = ['MECO', 'Valencia', 'Torija', 'Antequera', 'Taisa', 'Cesión'];
+  var OPCIONES_SUBTIPO_ = ['Devolución', 'Inventario', 'Demarca', 'Petición Reserva', 'Sobrante', 'Ean Erroneo', 'Anulado', 'Rotura', 'Pedido cliente'];
+  var OPCIONES_RAZON_FLUJO_ = ['Sobrante', 'Soporte No documentado cargado', 'Anulado', 'Libre Servicio'];
+  var OPCIONES_TIENDA_ADMIN_ = ['Málaga', 'Marbella', 'Mijas', 'Granada'];
+
+  function opcionesSelect_(valores, actual) {
+    return valores.map(function (v) {
+      return '<option value="' + v + '"' + (v === actual ? ' selected' : '') + '>' + v + '</option>';
+    }).join('');
+  }
+
+  function sincronizarSelectSubtipoTaisa_() {
+    var select = document.getElementById('subtipoTaisa');
+    if (!select) return;
+    var existentes = Array.prototype.map.call(select.options, function (o) { return o.value; });
+    OPCIONES_SUBTIPO_.forEach(function (valor) {
+      if (existentes.indexOf(valor) === -1) {
+        var opt = document.createElement('option');
+        opt.value = valor;
+        opt.textContent = valor;
+        select.appendChild(opt);
+      }
+    });
+  }
+
+  function onCambioOrigenEdicion_(select) {
+    var fila = select.closest('tr');
+    var origen = select.value;
+    fila.querySelector('[data-campo="subtipo"]').style.display = origen === 'Taisa' ? '' : 'none';
+    fila.querySelector('[data-campo="origenTienda"]').style.display = origen === 'Cesión' ? '' : 'none';
+    // La razón del flujo no aplica a Taisa (ver toggleSubtipoTaisa) — el servidor ya
+    // la fuerza a vacío en ese caso (razonFlujoEfectiva), aquí solo se oculta.
+    fila.querySelector('[data-campo="razonFlujo"]').style.display = origen === 'Taisa' ? 'none' : '';
+  }
+
+  function editarSoporteUI_(idUnico) {
+    var r = ultimosResultadosInterno_.filter(function (x) { return x.idUnico === idUnico; })[0];
+    var fila = document.querySelector('tr[data-idunico="' + idUnico + '"]');
+    if (!r || !fila) return;
+    fila.innerHTML =
+      '<td data-label="Sel."><input type="checkbox" disabled></td>' +
+      '<td data-label="Nº Pedido"><input type="text" data-campo="numeroPedido" value="' + escapeHtml_(r.numeroPedido) + '" style="width:110px;"></td>' +
+      '<td data-label="Soporte">' + (r.soporteTotal > 1 ? (r.soporteNum + '/' + r.soporteTotal) : '—') + '</td>' +
+      '<td data-label="Origen">' +
+        '<select data-campo="origen" onchange="onCambioOrigenEdicion_(this)">' + opcionesSelect_(OPCIONES_ORIGEN_, r.origen) + '</select> ' +
+        '<select data-campo="subtipo" style="' + (r.origen === 'Taisa' ? '' : 'display:none;') + '">' + opcionesSelect_(OPCIONES_SUBTIPO_, r.subtipo) + '</select>' +
+        '<select data-campo="origenTienda" style="' + (r.origen === 'Cesión' ? '' : 'display:none;') + '">' + opcionesSelect_(OPCIONES_TIENDA_ADMIN_, r.origenTienda) + '</select>' +
+        '<select data-campo="razonFlujo" title="Razón del flujo (opcional)" style="' + (r.origen === 'Taisa' ? 'display:none;' : '') + '">' +
+          '<option value=""' + (!r.razonFlujo ? ' selected' : '') + '>-- Sin razón --</option>' +
+          opcionesSelect_(OPCIONES_RAZON_FLUJO_, r.razonFlujo) +
+        '</select>' +
+      '</td>' +
+      '<td data-label="Destino"><select data-campo="destino">' + opcionesSelect_(OPCIONES_TIENDA_ADMIN_, r.destino) + '</select></td>' +
+      '<td data-label="Estado">' + escapeHtml_(r.estado) + '</td>' +
+      '<td data-label="ID único">' + escapeHtml_(r.idUnico) + '</td>' +
+      '<td data-label="Creado">' + formatearFechaHora(r.fechaCreacion) + '</td>' +
+      '<td data-label="Cargado">—</td>' +
+      '<td data-label="Llegó">—</td>' +
+      '<td data-label="Contenido">—</td>' +
+      '<td data-label="Acciones">' +
+        '<button type="button" class="btn-link" onclick="guardarEdicionSoporte_(\'' + idUnico + '\')">Guardar</button> ' +
+        '<button type="button" class="btn-link" onclick="refrescarListaConAcciones_()">Cancelar</button>' +
+      '</td>';
+  }
+
+  function guardarEdicionSoporte_(idUnico) {
+    var fila = document.querySelector('tr[data-idunico="' + idUnico + '"]');
+    if (!fila) return;
+    var cambios = {};
+    fila.querySelectorAll('[data-campo]').forEach(function (el) {
+      cambios[el.dataset.campo] = el.value.trim();
+    });
+    gas('actualizarSoporteAdmin', idUnico, cambios).then(function () {
+      refrescarListaConAcciones_();
+    }).catch(function (err) {
+      alert('Error al guardar: ' + (err && err.message ? err.message : err));
+    });
+  }
+
+  function borrarSoporteUI_(idUnico) {
+    if (!confirm('¿Borrar el soporte ' + idUnico + '? Esta acción no se puede deshacer.')) return;
+    gas('borrarSoporteAdmin', idUnico).then(function () {
+      refrescarListaConAcciones_();
+    }).catch(function (err) {
+      alert('Error al borrar: ' + (err && err.message ? err.message : err));
+    });
+  }
+
+  // interno, incpc, preparacion y las cuatro de arrastres son las pestañas que pueden
+  // mostrar una fila editable/borrable — tras guardar, cancelar o borrar, se refresca
+  // la que esté visible.
+  function refrescarListaConAcciones_() {
+    if (!document.getElementById('vistaIncpc').classList.contains('vista-oculta')) {
+      cargarIncpc_();
+      return;
+    }
+    if (!document.getElementById('vistaPreparacion').classList.contains('vista-oculta')) {
+      cargarPreparacion_();
+      return;
+    }
+    for (var tab in ARRASTRES_) {
+      if (!document.getElementById('vista' + ARRASTRES_[tab].sufijo).classList.contains('vista-oculta')) {
+        cargarArrastre_(tab);
+        return;
+      }
+    }
+    buscarYMostrar('interno');
+  }
+
+  function toggleSeleccionarTodo_(maestro) {
+    document.querySelectorAll('.chk-soporte:not(:disabled)').forEach(function (chk) {
+      chk.checked = maestro.checked;
+    });
+  }
+
+  function borrarSeleccionadosUI_() {
+    var idsUnicos = Array.prototype.slice.call(document.querySelectorAll('.chk-soporte:checked'))
+      .map(function (chk) { return chk.value; });
+    if (idsUnicos.length === 0) {
+      alert('No hay soportes seleccionados.');
+      return;
+    }
+    if (!confirm('¿Borrar ' + idsUnicos.length + ' soporte(s) seleccionados? Esta acción no se puede deshacer.')) return;
+    gas('borrarSoportesAdmin', idsUnicos).then(function (r) {
+      var mensaje = r.borrados.length + ' soporte(s) borrado(s).';
+      if (r.rechazados.length > 0) {
+        mensaje += ' ' + r.rechazados.length + ' no se pudieron borrar (puede que ya se hayan cargado en un camión mientras tanto) — recarga la búsqueda.';
+      }
+      alert(mensaje);
+      refrescarListaConAcciones_();
+    }).catch(function (err) {
+      alert('Error al borrar: ' + (err && err.message ? err.message : err));
+    });
+  }
+
+  // Agrupa los soportes marcados en una única etiqueta nueva (agruparSoportesAdmin,
+  // Backend.gs) — mismas reglas de compatibilidad que un grupo creado de una vez en
+  // Cargar Lote (mismo destino/origen/subtipo, todos REGISTRADO); si algo no encaja, el
+  // servidor lo rechaza con un motivo concreto que se muestra tal cual. Si alguno de los
+  // soportes agrupados venía de INCPC y no se pudo avisar a esa hoja del cambio de ID
+  // (best-effort, no bloqueante), el resultado trae avisosIncpc para revisar a mano.
+  function agruparSeleccionadosUI_() {
+    var idsUnicos = Array.prototype.slice.call(document.querySelectorAll('.chk-soporte:checked'))
+      .map(function (chk) { return chk.value; });
+    if (idsUnicos.length < 2) {
+      alert('Selecciona al menos 2 soportes para agrupar.');
+      return;
+    }
+    if (!confirm('¿Agrupar ' + idsUnicos.length + ' soporte(s) en una única etiqueta nueva? Los soportes originales se borran. Esta acción no se puede deshacer.')) return;
+    gas('agruparSoportesAdmin', idsUnicos).then(function (r) {
+      var mensaje = r.cantidadOriginal + ' soporte(s) agrupados en ' + r.idUnicoNuevo + '.';
+      if (r.avisosIncpc && r.avisosIncpc.length > 0) {
+        mensaje += '\n\n⚠ ' + r.avisosIncpc.join('\n');
+      }
+      alert(mensaje);
+      refrescarListaConAcciones_();
+    }).catch(function (err) {
+      alert('Error al agrupar: ' + (err && err.message ? err.message : err));
+    });
+  }
+
+  // Copia los resultados de la última búsqueda (Buscador Interno) al portapapeles
+  // como texto separado por tabuladores, para pegar en Excel/Sheets o en un chat.
+  function copiarResultadosUI_(btn) {
+    if (ultimosResultadosInterno_.length === 0) {
+      alert('No hay resultados para copiar. Busca primero.');
+      return;
+    }
+    var cabecera = ['Nº Pedido', 'Soporte', 'Origen', 'Destino', 'Estado', 'ID único', 'Creado', 'Cargado', 'Llegó', 'Contenido'];
+    var filas = ultimosResultadosInterno_.map(function (r) {
+      var soporte = r.soporteTotal > 1 ? (r.soporteNum + '/' + r.soporteTotal) : '—';
+      var cargado = r.bateaId ? formatearFechaHora(r.fechaCargado) : '—';
+      var llego = r.bateaId
+        ? (formatearFecha(r.fechaLlegada) + (r.horarioLlegada ? ' ' + r.horarioLlegada : ''))
+        : 'Pendiente';
+      var contenido = (r.contenido && r.contenido.length > 0)
+        ? r.contenido.map(function (c) { return c.cantidad + 'x ' + c.descripcion; }).join(', ')
+        : '—';
+      return [
+        r.numeroPedido, soporte, r.origenTexto + (r.razonFlujo ? ' (' + r.razonFlujo + ')' : ''),
+        r.destino, estadoMostrado_(r), r.idUnico, formatearFechaHora(r.fechaCreacion), cargado, llego, contenido
+      ].join('\t');
+    });
+    var texto = cabecera.join('\t') + '\n' + filas.join('\n');
+    copiarTextoAlPortapapeles_(texto, function (ok) {
+      var original = btn.textContent;
+      btn.textContent = ok ? ('¡Copiado! (' + ultimosResultadosInterno_.length + ')') : 'No se pudo copiar';
+      setTimeout(function () { btn.textContent = original; }, 1800);
+      if (!ok) alert('No se pudo copiar automáticamente. Selecciona y copia manualmente desde la tabla.');
+    });
+  }
+
+  // navigator.clipboard requiere contexto seguro y puede fallar en el WebView de
+  // Apps Script en Android — con execCommand('copy') como respaldo siempre funciona.
+  function copiarTextoAlPortapapeles_(texto, callback) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(texto).then(function () { callback(true); }).catch(function () {
+        callback(copiarConExecCommand_(texto));
+      });
+      return;
+    }
+    callback(copiarConExecCommand_(texto));
+  }
+
+  function copiarConExecCommand_(texto) {
+    var textarea = document.createElement('textarea');
+    textarea.value = texto;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(textarea);
+    return ok;
+  }
+
+  function buscarYMostrar(modo) {
+    var filtros = {};
+    if (modo === 'tienda') {
+      filtros.destino = TIENDA_FILTRO;
+      filtros.fecha = document.getElementById('tiendaFecha').value || undefined;
+      filtros.idUnico = document.getElementById('tiendaIdUnico').value.trim() || undefined;
+      filtros.numeroPedido = document.getElementById('tiendaNumeroPedido').value.trim() || undefined;
+    } else {
+      filtros.fecha = document.getElementById('internoFecha').value || undefined;
+      filtros.idUnico = document.getElementById('internoIdUnico').value.trim() || undefined;
+      filtros.numeroPedido = document.getElementById('internoNumeroPedido').value.trim() || undefined;
+      filtros.origen = document.getElementById('internoOrigen').value || undefined;
+      filtros.destino = document.getElementById('internoDestino').value || undefined;
+      filtros.estado = document.getElementById('internoEstado').value || undefined;
+      filtros.ordenAscendente = document.getElementById('internoOrden').value === 'asc';
+    }
+    var contenedorId = modo === 'tienda' ? 'resultadosTienda' : 'resultadosInterno';
+    document.getElementById(contenedorId).innerHTML = '<p class="cargando-resultados">Buscando…</p>';
+    console.log('buscarEtiquetas filtros enviados:', JSON.stringify(filtros));
+    gas('buscarEtiquetas', filtros).then(function (resultados) {
+      console.log('buscarEtiquetas resultados recibidos:', JSON.stringify(resultados));
+      if (modo === 'interno') ultimosResultadosInterno_ = resultados;
+      renderizarResultados(contenedorId, resultados);
+    }).catch(function (err) {
+      console.error('buscarEtiquetas error:', err);
+      document.getElementById(contenedorId).innerHTML =
+        '<p class="sin-resultados" style="color:var(--color-error);">Error al buscar: ' + (err && err.message ? err.message : err) + '</p>';
+    });
+  }
+
+  var cargaActualId = null;
+  var camionDestinoSeleccionado = '';
+  var TIENDA_SLUG_ = { 'Málaga': 'malaga', 'Marbella': 'marbella', 'Mijas': 'mijas', 'Granada': 'granada' };
+
+  // Fusión Carta de Portes SIE (2026-09-15): puente de ubicaciones RC1, portado tal
+  // cual de CartadePortesSIE/cartaPortes.html — dispara al cerrar la carga (mismo
+  // gesto de clic que el botón "Cerrar carga"), no por cada escaneo, igual que hacía
+  // SIE con "Generar carta". Android bloquea el salto a otra app si se dispara desde
+  // la respuesta async de google.script.run, por eso va SÍNCRONO en el propio click.
+  var SHORTCUT_ID_UBICACIONES_SIE_ = '19a50928-cc22-4494-b052-eef73ada58a3';
+  var CODIGO_TIENDA_UBICACIONES_SIE_ = { 'Marbella': '014', 'Mijas': '279' };
+  var paletesSsccCargaActual_ = [];
+
+  function actualizarUbicacionesSie_() {
+    if (!paletesSsccCargaActual_.length) return;
+    var codigoTienda = CODIGO_TIENDA_UBICACIONES_SIE_[camionDestinoSeleccionado] || '';
+    if (!codigoTienda) return;
+    var url = 'http-shortcuts://' + SHORTCUT_ID_UBICACIONES_SIE_
+      + '?SSCC_LIST=' + encodeURIComponent(JSON.stringify(paletesSsccCargaActual_))
+      + '&TIENDA=' + encodeURIComponent(codigoTienda);
+    window.location.href = url;
+  }
+
+  function marcarTiendaCamionSeleccionada_(tienda) {
+    camionDestinoSeleccionado = tienda;
+    document.querySelectorAll('#camionTiendaSelector .tienda-btn').forEach(function (b) {
+      var slug = TIENDA_SLUG_[b.dataset.tienda];
+      b.classList.toggle('sel-' + slug, b.dataset.tienda === tienda);
+    });
+  }
+
+  function seleccionarTiendaCamion_(tienda) {
+    marcarTiendaCamionSeleccionada_(tienda);
+    poblarHorarios_();
+  }
+
+  function poblarHorarios_() {
+    var destino = camionDestinoSeleccionado;
+    var sel = document.getElementById('camionHorario');
+    if (!destino) {
+      sel.innerHTML = '<option value="">(elige una tienda primero)</option>';
+      return Promise.resolve([]);
+    }
+    // Una sola fuente de verdad (ConfigEntregas.gs) — antes había una lista duplicada
+    // a mano aquí que podía desincronizarse de la del servidor.
+    return gas('obtenerHorariosTienda', destino).then(function (horarios) {
+      if (!horarios || horarios.length === 0) {
+        sel.innerHTML = '<option value="">(sin horarios configurados para ' + destino + ')</option>';
+      } else {
+        sel.innerHTML = horarios.map(function (h) { return '<option value="' + h + '">' + h + '</option>'; }).join('');
+      }
+      return horarios || [];
+    });
+  }
+
+  var DIAS_CORTOS_ = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+  function fechaComoValorInput_(d) {
+    var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  function generarChipsFecha_() {
+    var hoy = new Date();
+    var chips = [];
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + i);
+      var valor = fechaComoValorInput_(d);
+      var etiqueta = i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : (DIAS_CORTOS_[d.getDay()] + ' ' + d.getDate());
+      chips.push({ valor: valor, etiqueta: etiqueta });
+    }
+    var cont = document.getElementById('camionFechaChips');
+    cont.innerHTML = chips.map(function (c) {
+      return '<button type="button" class="fecha-chip" data-valor="' + c.valor + '" onclick="seleccionarChipFecha_(\'' + c.valor + '\')">' + c.etiqueta + '</button>';
+    }).join('') + '<button type="button" class="fecha-chip fecha-chip-otra" id="chipOtraFecha" onclick="activarOtraFecha_()">📅 Otra fecha</button>';
+    // Por defecto, "Hoy" queda seleccionado y camionFecha.value se inicializa a hoy.
+    document.getElementById('camionFecha').value = chips[0].valor;
+    marcarChipSeleccionado_(chips[0].valor);
+  }
+
+  function marcarChipSeleccionado_(valor) {
+    var cont = document.getElementById('camionFechaChips');
+    var encontrado = false;
+    cont.querySelectorAll('.fecha-chip[data-valor]').forEach(function (el) {
+      var sel = el.dataset.valor === valor;
+      el.classList.toggle('sel', sel);
+      if (sel) encontrado = true;
+    });
+    var chipOtra = document.getElementById('chipOtraFecha');
+    chipOtra.classList.toggle('sel', !encontrado);
+    chipOtra.textContent = encontrado ? '📅 Otra fecha' : '📅 ' + valor;
+    document.getElementById('camionFecha').classList.toggle('vista-oculta', encontrado);
+  }
+
+  function seleccionarChipFecha_(valor) {
+    document.getElementById('camionFecha').value = valor;
+    marcarChipSeleccionado_(valor);
+  }
+
+  function activarOtraFecha_() {
+    document.getElementById('camionFecha').classList.remove('vista-oculta');
+    document.getElementById('camionFecha').focus();
+  }
+
+  // Si se elige la fecha a mano desde "Otra fecha", refleja la selección en los chips
+  // (puede coincidir con uno de los 7 chips o quedar como fecha suelta).
+  document.getElementById('camionFecha').addEventListener('change', function () {
+    marcarChipSeleccionado_(this.value);
+  });
+
+  function actualizarStepper_(pasoActivo) {
+    document.querySelectorAll('#camionStepper .paso').forEach(function (el) {
+      var n = parseInt(el.dataset.paso, 10);
+      el.classList.toggle('hecho', n < pasoActivo);
+      el.classList.toggle('activo', n === pasoActivo);
+    });
+  }
+
+  function crearCargaUI() {
+    var destino = camionDestinoSeleccionado;
+    var fecha = document.getElementById('camionFecha').value;
+    var horario = document.getElementById('camionHorario').value;
+    if (!destino) { alert('Elige una tienda destino'); return; }
+    if (!fecha) { alert('Elige una fecha de entrega'); return; }
+    if (!horario) { alert('No hay horario seleccionable para ' + destino + ' (falta configurar)'); return; }
+    abrirCargaDirecta_(destino, fecha, horario);
+  }
+
+  function abrirCargaDirecta_(destino, fecha, horario) {
+    // Compartida entre el flujo manual (Paso 1) y la llegada cruzada desde Carta de
+    // Portes SIE (vista operario): usa obtenerOCrearCarga para "seguir" una carga ya
+    // abierta con el mismo destino+fecha+horario en vez de duplicarla.
+    gas('obtenerOCrearCarga', destino, fecha, horario).then(function (r) {
+      cargaActualId = r.idCarga;
+      paletesSsccCargaActual_ = [];
+      renderizarListaPalets_();
+      document.getElementById('camionPaso1').classList.add('vista-oculta');
+      document.getElementById('camionPaso2').classList.remove('vista-oculta');
+      actualizarStepper_(2);
+      document.getElementById('camionTitulo').textContent =
+        r.idCarga + ' — ' + destino + ' ' + fecha + ' ' + horario + (r.reutilizada ? ' (continuando)' : '');
+      var input = document.getElementById('camionEscaneo');
+      input.value = '';
+      input.focus();
+      modoManualActivo_ = false;
+      document.getElementById('btnModoManual').classList.remove('activo');
+      document.getElementById('btnAnadirManual').classList.add('vista-oculta');
+      input.placeholder = 'Esperando lectura...';
+      gas('modoPruebaActivo').then(function (activo) {
+        document.getElementById('camionBadgePrueba').classList.toggle('vista-oculta', !activo);
+      });
+      // Si se reutiliza una carga ya empezada, mostrar lo que ya se había escaneado.
+      gas('obtenerCarga', cargaActualId).then(function (c) { renderizarListaCamion_(c.escaneados); });
+      gas('obtenerPaletesCarga', cargaActualId).then(function (sscc) {
+        paletesSsccCargaActual_ = sscc;
+        renderizarListaPalets_();
+      });
+    }).catch(function (err) { alert('Error al abrir la carga: ' + err.message); });
+  }
+
+  function renderizarListaCamion_(escaneados) {
+    var cont = document.getElementById('camionLista');
+    document.getElementById('contadorPedidos').textContent = escaneados ? escaneados.length : '';
+    if (!escaneados || escaneados.length === 0) {
+      cont.innerHTML = '<p class="sin-resultados">Ningún soporte escaneado todavía.</p>';
+      return;
+    }
+    var filas = escaneados.map(function (e) {
+      return '<div class="fila-soporte fila-origen-hodos">' +
+        '<div class="fila-soporte-info"><span class="valor-id">Pedido ' + escapeHtml_(e.numeroPedido) + '</span><span class="fila-soporte-sub">' + e.idUnico + ' · ' + escapeHtml_(e.origenTexto) + '</span></div>' +
+        '<button type="button" class="btn-quitar-fila" title="Quitar de esta carga" onclick="quitarSoporteUI_(\'' + e.idUnico + '\')">✕</button></div>';
+    }).join('');
+    cont.innerHTML = '<div class="lista-soportes">' + filas + '</div>';
+  }
+
+  // Fusión Carta de Portes SIE (2026-09-15): confirmación visible de los palets SSCC
+  // ya escaneados en esta carga — sin esto, un escaneo repetido por no ver feedback
+  // en pantalla generaba filas duplicadas en `palets` (ver escanearPaletSSCC_).
+  function renderizarListaPalets_() {
+    var cont = document.getElementById('camionListaPalets');
+    if (!cont) return;
+    var hay = paletesSsccCargaActual_.length > 0;
+    document.getElementById('tituloListaPalets').classList.toggle('vista-oculta', !hay);
+    document.getElementById('wrapListaPalets').classList.toggle('vista-oculta', !hay);
+    document.getElementById('contadorPalets').textContent = hay ? paletesSsccCargaActual_.length : '';
+    if (!hay) { cont.innerHTML = ''; return; }
+    var filas = paletesSsccCargaActual_.map(function (s) {
+      return '<div class="fila-soporte fila-origen-sie">' +
+        '<span class="valor-sscc">' + s + '</span>' +
+        '<button type="button" class="btn-quitar-fila" title="Quitar de esta carga" onclick="quitarPaletUI_(\'' + s + '\')">✕</button></div>';
+    }).join('');
+    cont.innerHTML = '<div class="lista-soportes">' + filas + '</div>';
+  }
+
+  function quitarSoporteUI_(idUnico) {
+    if (!cargaActualId) return;
+    mostrarConfirmacion_('¿Quitar ' + idUnico + ' de esta carga? Volverá a estar disponible para escanear.', function () {
+      gas('quitarSoporteDeCarga', cargaActualId, idUnico).then(function () {
+        gas('obtenerCarga', cargaActualId).then(function (c) { renderizarListaCamion_(c.escaneados); });
+      }).catch(function (err) {
+        alert('Error al quitar: ' + (err && err.message ? err.message : err));
+      });
+    }, 'Quitar soporte');
+  }
+
+  function quitarPaletUI_(sscc) {
+    if (!cargaActualId) return;
+    mostrarConfirmacion_('¿Quitar el palet ' + sscc + ' de esta carga?', function () {
+      gas('quitarPaletDeCarga', cargaActualId, sscc).then(function () {
+        paletesSsccCargaActual_ = paletesSsccCargaActual_.filter(function (s) { return s !== sscc; });
+        renderizarListaPalets_();
+      }).catch(function (err) {
+        alert('Error al quitar: ' + (err && err.message ? err.message : err));
+      });
+    }, 'Quitar palet');
+  }
+
+  var GESTO_MASIVA_MS_ = 2000; // pulsación mantenida sobre el título de la carga
+  var gestoMasivaTimer_ = null;
+
+  function iniciarGestoMasiva_() {
+    if (gestoMasivaTimer_) clearTimeout(gestoMasivaTimer_);
+    gestoMasivaTimer_ = setTimeout(function () {
+      gestoMasivaTimer_ = null;
+      abrirModalCargaMasiva_();
+    }, GESTO_MASIVA_MS_);
+  }
+
+  function cancelarGestoMasiva_() {
+    if (gestoMasivaTimer_) { clearTimeout(gestoMasivaTimer_); gestoMasivaTimer_ = null; }
+  }
+
+  var camionTituloEl_ = document.getElementById('camionTitulo');
+  camionTituloEl_.addEventListener('pointerdown', iniciarGestoMasiva_);
+  camionTituloEl_.addEventListener('pointerup', cancelarGestoMasiva_);
+  camionTituloEl_.addEventListener('pointerleave', cancelarGestoMasiva_);
+  camionTituloEl_.addEventListener('pointercancel', cancelarGestoMasiva_);
+  // Refuerzo del gesto oculto en móvil: además del CSS (user-select/touch-callout),
+  // bloquea el menú contextual nativo ("Copiar"/"Seleccionar") que algunos Android
+  // siguen mostrando en pulsación larga incluso con user-select:none.
+  camionTituloEl_.addEventListener('contextmenu', function (ev) { ev.preventDefault(); });
+
+  var pendientesMasivaCache_ = [];
+
+  function abrirModalCargaMasiva_() {
+    if (!cargaActualId) return;
+    var destino = camionDestinoSeleccionado;
+    gas('obtenerPendientesPorTienda').then(function (porTienda) {
+      var entrada = (porTienda || []).filter(function (t) { return t.tienda === destino; })[0];
+      pendientesMasivaCache_ = (entrada && entrada.pendientes) || [];
+      renderizarListaCargaMasiva_();
+      document.getElementById('chkSeleccionarTodosMasiva').checked = false;
+      document.getElementById('modalCargaMasiva').classList.remove('vista-oculta');
+    }).catch(function (err) {
+      mostrarModalAviso_('Error', 'No se pudieron cargar los soportes pendientes: ' + (err && err.message ? err.message : err));
+    });
+  }
+
+  function renderizarListaCargaMasiva_() {
+    var cont = document.getElementById('listaCargaMasiva');
+    if (pendientesMasivaCache_.length === 0) {
+      cont.innerHTML = '<p class="sin-resultados">No hay soportes pendientes para esta tienda.</p>';
+      return;
+    }
+    cont.innerHTML = pendientesMasivaCache_.map(function (p) {
+      return '<label class="item-carga-masiva"><input type="checkbox" class="chk-masiva" value="' + p.idUnico + '">' +
+        '<span class="info"><span class="id">' + p.idUnico + '</span><br><span class="origen">' + escapeHtml_(p.origenTexto) + '</span></span></label>';
+    }).join('');
+  }
+
+  function toggleSeleccionarTodosMasiva_(chk) {
+    document.querySelectorAll('#listaCargaMasiva .chk-masiva').forEach(function (c) { c.checked = chk.checked; });
+  }
+
+  function cerrarModalCargaMasiva_() {
+    document.getElementById('modalCargaMasiva').classList.add('vista-oculta');
+  }
+
+  function aplicarCargaMasiva_() {
+    var seleccionados = Array.prototype.slice.call(document.querySelectorAll('#listaCargaMasiva .chk-masiva:checked')).map(function (c) { return c.value; });
+    if (seleccionados.length === 0) { cerrarModalCargaMasiva_(); return; }
+    var idCarga = cargaActualId;
+    var añadidos = 0;
+    var rechazados = [];
+
+    function siguiente(i) {
+      if (i >= seleccionados.length) {
+        cerrarModalCargaMasiva_();
+        gas('obtenerCarga', idCarga).then(function (c) { renderizarListaCamion_(c.escaneados); });
+        var resumen = añadidos + ' soporte(s) añadido(s).';
+        if (rechazados.length > 0) resumen += ' No se pudieron añadir: ' + rechazados.join(', ') + '.';
+        mostrarModalAviso_('Carga masiva completada', resumen);
+        return;
+      }
+      gas('escanearSoporte', idCarga, seleccionados[i]).then(function (r) {
+        if (r.ok) { añadidos++; } else { rechazados.push(seleccionados[i] + ' (' + r.motivo + ')'); }
+        siguiente(i + 1);
+      }).catch(function () {
+        rechazados.push(seleccionados[i] + ' (error de red)');
+        siguiente(i + 1);
+      });
+    }
+    siguiente(0);
+  }
+
+  function mostrarAvisoCamion_(mensaje, esError) {
+    var aviso = document.getElementById('camionAviso');
+    aviso.textContent = mensaje;
+    aviso.style.color = esError ? 'var(--color-error)' : 'var(--color-accent-text)';
+    setTimeout(function () { aviso.textContent = ''; }, 4000);
+  }
+
+  var ESCANEO_PROCESANDO_ = false;
+  var ESCANEO_BUFFER_ = { inicio: 0, timer: null };
+  var ESCANEO_PAUSA_MS_ = 80; // silencio tras el último carácter para dar por acabada la lectura
+  var ESCANEO_MAX_DURACION_MS_ = 300; // si teclear el valor entero tarda más que esto, se asume manual (no autoenvía)
+
+  function procesarEscaneo_(input) {
+    // Puede ser el barcode de la etiqueta (idUnico, prefijo HODOS-) o un número de
+    // pedido tecleado a mano — escanearSoporte resuelve ambos casos.
+    var valorEscaneado = input.value.trim();
+    input.value = '';
+    if (!valorEscaneado || !cargaActualId || ESCANEO_PROCESANDO_) return;
+    ESCANEO_PROCESANDO_ = true;
+    gas('escanearSoporte', cargaActualId, valorEscaneado).then(function (r) {
+      ESCANEO_PROCESANDO_ = false;
+      if (r.ok && r.tipo === 'palet') {
+        if (r.repetido) {
+          mostrarAvisoCamion_('Palet SIE ya escaneado: ' + r.sscc, true);
+        } else {
+          paletesSsccCargaActual_.push(r.sscc);
+          mostrarAvisoCamion_('Palet SIE añadido: ' + r.sscc, false);
+        }
+        renderizarListaPalets_();
+      } else if (r.ok) {
+        mostrarAvisoCamion_('Añadido: ' + r.numeroPedido, false);
+        gas('obtenerCarga', cargaActualId).then(function (c) { renderizarListaCamion_(c.escaneados); });
+      } else if (r.motivo === 'DESTINO_INCORRECTO') {
+        mostrarAvisoCamion_('Este pedido es de ' + r.detalle.destinoReal + ', no coincide con esta carga', true);
+      } else if (r.motivo === 'YA_ESCANEADO') {
+        mostrarAvisoCamion_('Este pedido ya fue escaneado antes', true);
+      } else {
+        mostrarAvisoCamion_('Pedido no encontrado: ' + valorEscaneado, true);
+      }
+    }).catch(function (err) {
+      ESCANEO_PROCESANDO_ = false;
+      mostrarAvisoCamion_('Error: ' + err.message, true);
+    });
+  }
+
+  var modoManualActivo_ = false;
+
+  function toggleModoManual_() {
+    modoManualActivo_ = !modoManualActivo_;
+    document.getElementById('btnModoManual').classList.toggle('activo', modoManualActivo_);
+    document.getElementById('btnAnadirManual').classList.toggle('vista-oculta', !modoManualActivo_);
+    document.getElementById('camionEscaneo').placeholder = modoManualActivo_
+      ? 'Modo manual: escribe y pulsa Intro o Añadir'
+      : 'Esperando lectura...';
+  }
+
+  var camionEscaneoInput_ = document.getElementById('camionEscaneo');
+
+  camionEscaneoInput_.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Enter') return;
+    if (ESCANEO_BUFFER_.timer) { clearTimeout(ESCANEO_BUFFER_.timer); ESCANEO_BUFFER_.timer = null; }
+    ESCANEO_BUFFER_.inicio = 0;
+    procesarEscaneo_(this);
+  });
+
+  camionEscaneoInput_.addEventListener('input', function () {
+    // Modo manual (botón "Introducir a mano"): nunca autoenvía, sea cual sea la
+    // velocidad de tecleo — solo se añade con Intro o el botón "Añadir".
+    if (modoManualActivo_) return;
+    // Autointro: si la pistola de código de barras no manda Intro al terminar de leer,
+    // esto detecta el patrón típico de una lectura (ráfaga de caracteres seguida de un
+    // silencio, toda ella muy rápida) y envía el escaneo sola, sin esperar a que nadie
+    // pulse nada. Si en cambio el valor se tecleó a mano y se tardó más de
+    // ESCANEO_MAX_DURACION_MS_ en total, NO se autoenvía al hacer la pausa: se asume
+    // que es tecleo manual y sigue haciendo falta Intro (para no disparar el envío a
+    // medias mientras alguien corrige un número).
+    var el = this;
+    if (ESCANEO_BUFFER_.timer) clearTimeout(ESCANEO_BUFFER_.timer);
+    if (!ESCANEO_BUFFER_.inicio) ESCANEO_BUFFER_.inicio = Date.now();
+    ESCANEO_BUFFER_.timer = setTimeout(function () {
+      var duracion = Date.now() - ESCANEO_BUFFER_.inicio;
+      ESCANEO_BUFFER_.inicio = 0;
+      if (duracion <= ESCANEO_MAX_DURACION_MS_ && el.value.trim()) {
+        procesarEscaneo_(el);
+      }
+    }, ESCANEO_PAUSA_MS_);
+  });
+
+  function cerrarCargaUI() {
+    if (!cargaActualId) return;
+    mostrarConfirmacion_('¿Cerrar la carga y enviar el informe?', function () {
+      actualizarUbicacionesSie_(); // síncrono, en el mismo gesto de clic — ver nota más arriba
+      gas('cerrarCarga', cargaActualId).then(mostrarResumenCierre_).catch(function (err) {
+        mostrarModalAviso_('No se puede cerrar la carga', err && err.message ? err.message : String(err));
+      });
+    }, 'Cerrar carga');
+  }
+
+  function mostrarResumenCierre_(r) {
+    document.getElementById('camionPaso2').classList.add('vista-oculta');
+    document.getElementById('camionPaso3').classList.remove('vista-oculta');
+    actualizarStepper_(3);
+    var estadoEmail = r.emailEnviado === 'SI' ? 'Email enviado correctamente.' :
+      r.emailEnviado.indexOf('MODO_PRUEBA') === 0 ? 'Modo prueba activo: no se ha enviado ningún email.' :
+      (r.destinatariosConfigurados === 0 ? 'Sin destinatarios configurados para esta tienda — no se ha enviado ningún email.' : 'No se pudo enviar el email (' + r.emailEnviado + ').');
+    var avisoForzado = (r.forzado && r.avisosOmitidos && r.avisosOmitidos.length > 0)
+      ? '<p style="color:var(--color-error);font-weight:700;">⚠️ Cierre forzado — se saltó: ' + escapeHtml_(r.avisosOmitidos.join(' · ')) + '</p>'
+      : '';
+    var avisoSie = (r.avisosSie && r.avisosSie.length > 0)
+      ? '<p style="color:var(--color-error);font-weight:700;">⚠️ ' + escapeHtml_(r.avisosSie.join(' · ')) + '</p>'
+      : '';
+    document.getElementById('camionResumen').innerHTML =
+      '<p>' + r.cantidad + ' soportes cargados.</p><p>' + estadoEmail + '</p>' + avisoForzado + avisoSie;
+    cargaActualId = null;
+  }
+
+  // ── Cierre forzado — función oculta: pulsación larga (2s) sobre "Cerrar carga" +
+  // confirmación explícita se salta los avisos de pedidos incompletos/MECO sin
+  // completar. Para casos reales de bloqueo sin salida normal (soporte perdido,
+  // pedido que ya no va a llegar). Queda registrado en el log del servidor y en el
+  // resumen que se muestra tras cerrar — nunca en silencio. ──
+  var GESTO_FORZAR_CIERRE_MS_ = 2000;
+  var gestoForzarCierreTimer_ = null;
+
+  function iniciarGestoForzarCierre_() {
+    if (gestoForzarCierreTimer_) clearTimeout(gestoForzarCierreTimer_);
+    gestoForzarCierreTimer_ = setTimeout(function () {
+      gestoForzarCierreTimer_ = null;
+      cerrarCargaForzadoUI_();
+    }, GESTO_FORZAR_CIERRE_MS_);
+  }
+
+  function cancelarGestoForzarCierre_() {
+    if (gestoForzarCierreTimer_) { clearTimeout(gestoForzarCierreTimer_); gestoForzarCierreTimer_ = null; }
+  }
+
+  function cerrarCargaForzadoUI_() {
+    if (!cargaActualId) return;
+    mostrarConfirmacion_(
+      '⚠️ CIERRE FORZADO\n\nEsto cierra la carga saltándose los avisos de pedidos incompletos o MECO sin completar. Cualquier pedido que falte quedará marcado como enviado aunque no lo esté.\n\n¿Seguro que quieres forzar el cierre?',
+      function () {
+        actualizarUbicacionesSie_();
+        gas('cerrarCarga', cargaActualId, true).then(mostrarResumenCierre_).catch(function (err) {
+          mostrarModalAviso_('No se pudo forzar el cierre', err && err.message ? err.message : String(err));
+        });
+      },
+      'Cierre forzado'
+    );
+  }
+
+  var btnCerrarCargaEl_ = document.getElementById('btnCerrarCarga');
+  btnCerrarCargaEl_.addEventListener('pointerdown', iniciarGestoForzarCierre_);
+  btnCerrarCargaEl_.addEventListener('pointerup', cancelarGestoForzarCierre_);
+  btnCerrarCargaEl_.addEventListener('pointerleave', cancelarGestoForzarCierre_);
+  btnCerrarCargaEl_.addEventListener('pointercancel', cancelarGestoForzarCierre_);
+  btnCerrarCargaEl_.addEventListener('contextmenu', function (ev) { ev.preventDefault(); });
+
+  function mostrarModalAviso_(titulo, texto) {
+    document.getElementById('modalAvisoTitulo').textContent = titulo;
+    document.getElementById('modalAvisoTexto').textContent = texto;
+    document.getElementById('modalAviso').classList.remove('vista-oculta');
+  }
+
+  function cerrarModalAviso_() {
+    document.getElementById('modalAviso').classList.add('vista-oculta');
+  }
+
+  // Reemplaza a confirm() nativo — ver comentario en el HTML del modal. alConfirmar
+  // se ejecuta de forma síncrona dentro del propio click de "Aceptar" (mismo gesto de
+  // usuario), así que sigue siendo válido llamar aquí dentro a actualizarUbicacionesSie_()
+  // (requisito de Android para el HTTP Shortcut, ver nota junto a esa función).
+  function mostrarConfirmacion_(mensaje, alConfirmar, titulo) {
+    document.getElementById('modalConfirmarTitulo').textContent = titulo || 'Confirmar';
+    document.getElementById('modalConfirmarTexto').textContent = mensaje;
+    document.getElementById('modalConfirmarBtnOk').onclick = function () {
+      cerrarModalConfirmar_();
+      alConfirmar();
+    };
+    document.getElementById('modalConfirmar').classList.remove('vista-oculta');
+  }
+
+  function cerrarModalConfirmar_() {
+    document.getElementById('modalConfirmar').classList.add('vista-oculta');
+  }
+
+  function cambiarPestana(nombre) {
+    // "camion" ya no vive en el panel de administración (tiene su propia URL
+    // ?vista=operario, sin sidebar).
+    document.getElementById('vistaCarga').classList.toggle('vista-oculta', nombre !== 'carga');
+    document.getElementById('vistaInterno').classList.toggle('vista-oculta', nombre !== 'interno');
+    document.getElementById('vistaPendientes').classList.toggle('vista-oculta', nombre !== 'pendientes');
+    document.getElementById('vistaIncpc').classList.toggle('vista-oculta', nombre !== 'incpc');
+    document.getElementById('vistaPreparacion').classList.toggle('vista-oculta', nombre !== 'preparacion');
+    document.getElementById('vistaMeco').classList.toggle('vista-oculta', nombre !== 'meco');
+    document.getElementById('vistaValencia').classList.toggle('vista-oculta', nombre !== 'valencia');
+    document.getElementById('vistaTorija').classList.toggle('vista-oculta', nombre !== 'torija');
+    document.getElementById('vistaAntequera').classList.toggle('vista-oculta', nombre !== 'antequera');
+    document.querySelectorAll('#tabBar button').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === nombre); });
+    if (nombre === 'interno') { buscarYMostrar('interno'); }
+    if (nombre === 'carga') { cargarHistorial(); }
+    if (nombre === 'pendientes') { cargarPendientes_(); }
+    if (nombre === 'incpc') { cargarIncpc_(); }
+    if (nombre === 'preparacion') { cargarPreparacion_(); }
+    if (ARRASTRES_[nombre]) { cargarArrastre_(nombre); }
+  }
+
+  function iniciarVistaOperario_() {
+    generarChipsFecha_();
+    actualizarStepper_(1);
+    if (TIENDA_FILTRO) {
+      marcarTiendaCamionSeleccionada_(TIENDA_FILTRO);
+    }
+    poblarHorarios_().then(function () {
+      if (FECHA_CONTEXTO) {
+        document.getElementById('camionFecha').value = FECHA_CONTEXTO;
+        marcarChipSeleccionado_(FECHA_CONTEXTO);
+      }
+      if (HORARIO_CONTEXTO) document.getElementById('camionHorario').value = HORARIO_CONTEXTO;
+
+      if (TIENDA_FILTRO && FECHA_CONTEXTO && HORARIO_CONTEXTO) {
+        // Contexto completo (llegada cruzada desde Carta de Portes SIE): sin volver a
+        // preguntar destino/fecha/hora, seguir directamente la carga de ese camión.
+        abrirCargaDirecta_(TIENDA_FILTRO, FECHA_CONTEXTO, HORARIO_CONTEXTO);
+      }
+    });
+  }
+
+  function iniciarVista() {
+    var temaGuardado = localStorage.getItem('hodosTema');
+    if (temaGuardado) {
+      aplicarTema_(temaGuardado);
+    }
+
+    if (VISTA === 'operario') {
+      document.getElementById('tabBar').classList.add('vista-oculta');
+      document.getElementById('vistaCarga').classList.add('vista-oculta');
+      document.getElementById('vistaInterno').classList.add('vista-oculta');
+      document.getElementById('vistaTienda').classList.add('vista-oculta');
+      document.getElementById('vistaCamion').classList.remove('vista-oculta');
+      iniciarVistaOperario_();
+    } else if (VISTA === 'tienda') {
+      document.getElementById('tabBar').classList.add('vista-oculta');
+      document.getElementById('vistaCarga').classList.add('vista-oculta');
+      document.getElementById('vistaInterno').classList.add('vista-oculta');
+      document.getElementById('vistaCamion').classList.add('vista-oculta');
+      if (!TIENDA_FILTRO) {
+        document.getElementById('avisoTiendaInvalida').classList.remove('vista-oculta');
+        return;
+      }
+      document.getElementById('vistaTienda').classList.remove('vista-oculta');
+      document.getElementById('tituloTienda').textContent = 'Buscador — ' + TIENDA_FILTRO;
+      buscarYMostrar('tienda');
+    } else {
+      document.getElementById('vistaCamion').classList.add('vista-oculta');
+      if (VISTA === 'interno') { cambiarPestana('interno'); }
+      else if (VISTA === 'incpc') { cambiarPestana('incpc'); }
+      else { cambiarPestana('carga'); }
+    }
+  }
+
+  iniciarVista();
+
+  gas('obtenerSubtiposConocidos').then(function (lista) {
+    OPCIONES_SUBTIPO_ = lista;
+    sincronizarSelectSubtipoTaisa_();
+  }).catch(function (err) {
+    console.error('No se pudo cargar la lista dinámica de subtipos:', err);
+  });
+</script>
+</body>
+</html>
