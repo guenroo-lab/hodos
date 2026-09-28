@@ -16,9 +16,11 @@ function supaConfig_() {
   return SUPA_CONFIG_MEMO_;
 }
 
-function supaCabeceras_() {
+function supaCabeceras_(schema) {
   var cfg = supaConfig_();
-  return { apikey: cfg.key, Authorization: 'Bearer ' + cfg.key, 'Content-Type': 'application/json' };
+  var h = { apikey: cfg.key, Authorization: 'Bearer ' + cfg.key, 'Content-Type': 'application/json' };
+  if (schema) h['Accept-Profile'] = schema;
+  return h;
 }
 
 // Bug real (2026-08-12): buscarEtiquetas (Backend.gs) lee toda la tabla `etiquetas` sin
@@ -31,7 +33,7 @@ function supaCabeceras_() {
 // pero buscarEtiquetas sí.
 var SUPA_PAGE_SIZE_ = 1000;
 
-function supaGet_(tabla, filtroPostgrest, columnas) {
+function supaGet_(tabla, filtroPostgrest, columnas, schema) {
   var cfg = supaConfig_();
   var select = 'select=' + (columnas || '*');
   var filtro = filtroPostgrest || '';
@@ -40,7 +42,7 @@ function supaGet_(tabla, filtroPostgrest, columnas) {
   // deliberadamente acotada — se respeta tal cual, una sola petición, sin paginar.
   if (/(^|&)limit=/.test(filtro)) {
     var urlAcotada = cfg.url + '/rest/v1/' + tabla + '?' + select + (filtro ? '&' + filtro : '');
-    var respAcotada = UrlFetchApp.fetch(urlAcotada, { method: 'get', headers: supaCabeceras_(), muteHttpExceptions: true });
+    var respAcotada = UrlFetchApp.fetch(urlAcotada, { method: 'get', headers: supaCabeceras_(schema), muteHttpExceptions: true });
     if (respAcotada.getResponseCode() >= 300) throw new Error('supaGet_(' + tabla + '): ' + respAcotada.getContentText());
     return JSON.parse(respAcotada.getContentText());
   }
@@ -81,7 +83,7 @@ function supaGet_(tabla, filtroPostgrest, columnas) {
   var todas = [];
   var desde = 0;
   while (true) {
-    var cabeceras = supaCabeceras_();
+    var cabeceras = supaCabeceras_(schema);
     cabeceras.Range = desde + '-' + (desde + SUPA_PAGE_SIZE_ - 1);
     cabeceras.Prefer = 'count=exact';
     var resp = UrlFetchApp.fetch(url, { method: 'get', headers: cabeceras, muteHttpExceptions: true });
