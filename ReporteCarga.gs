@@ -15,6 +15,8 @@ function htmlInformeCarga(idCarga) {
   // palets — una carga 100% refill SIE, sin ningún pedido cliente, es un caso real y
   // válido, no debe marcarse como "cerrada sin ningún soporte escaneado".
   var palets = leerPaletesPorCarga_(idCarga);
+  var solicitantesPedidos = _solicitantesPorIdUnico_(carga.escaneados.map(function (e) { return e.idUnico; }));
+  var solicitantesPalets = _solicitantesPorSscc_(carga.destino, palets.map(function (p) { return p.sscc; }));
 
   var filas = carga.escaneados.map(function (e, i) {
     var bg = i % 2 === 0 ? '#ffffff' : '#f9fafb';
@@ -25,12 +27,17 @@ function htmlInformeCarga(idCarga) {
     var contenidoHtml = contenidoTxt
       ? '<div style="font-size:10px;color:#888;margin-top:2px;">' + contenidoTxt + '</div>'
       : '';
+    var sol = solicitantesPedidos[e.idUnico];
+    var solHtml = '<td style="padding:8px 12px;font-size:10px;color:#666;border-bottom:1px solid #eee;">'
+      + (sol ? '<b>' + esc_(sol.ldap) + '</b>' + (sol.motivo ? '<br><span style="color:#999;">' + esc_(sol.motivo) + '</span>' : '') : '—')
+      + '</td>';
     return '<tr style="background:' + bg + ';">'
       + '<td style="padding:8px 10px;font-size:11px;text-align:center;color:#999;border-right:1px solid #eee;border-bottom:1px solid #eee;width:32px;">' + (i + 1) + '</td>'
       + '<td style="padding:8px 12px;font-family:Courier New,monospace;font-size:12px;font-weight:bold;color:#1a1a2e;border-right:1px solid #eee;border-bottom:1px solid #eee;">' + esc_(e.numeroPedido) + contenidoHtml + '</td>'
       + '<td style="padding:8px 12px;font-family:Courier New,monospace;font-size:10px;color:#999;border-right:1px solid #eee;border-bottom:1px solid #eee;">' + esc_(e.idUnico) + '</td>'
       + '<td style="padding:8px 12px;font-size:11px;color:#666;border-right:1px solid #eee;border-bottom:1px solid #eee;">' + esc_(e.origenTexto) + '</td>'
-      + '<td style="padding:8px 12px;font-size:11px;color:#666;border-bottom:1px solid #eee;">' + hora + '</td>'
+      + '<td style="padding:8px 12px;font-size:11px;color:#666;border-right:1px solid #eee;border-bottom:1px solid #eee;">' + hora + '</td>'
+      + solHtml
       + '</tr>';
   }).join('');
 
@@ -64,11 +71,16 @@ function htmlInformeCarga(idCarga) {
       var noEnc = !p.encontrado;
       var colorSec = noEnc ? '#c0392b' : '#1a1a2e';
       var nota = noEnc ? '<br><span style="font-size:9px;color:#c0392b;font-style:italic;">No encontrado en inventario</span>' : '';
+      var sol = solicitantesPalets[p.sscc];
+      var solHtml = '<td style="padding:8px 12px;font-size:10px;color:#666;border-bottom:1px solid #eee;">'
+        + (sol ? '<b>' + esc_(sol.ldap) + '</b>' + (sol.motivo ? '<br><span style="color:#999;">' + esc_(sol.motivo) + '</span>' : '') : '—')
+        + '</td>';
       return '<tr style="background:' + bg + ';">'
         + '<td style="padding:8px 10px;font-size:11px;text-align:center;color:#999;border-right:1px solid #eee;border-bottom:1px solid #eee;width:32px;">' + (i + 1) + '</td>'
         + '<td style="padding:8px 12px;font-family:Courier New,monospace;font-size:11px;color:#c0770a;border-right:1px solid #eee;border-bottom:1px solid #eee;">' + esc_(p.sscc) + '</td>'
         + '<td style="padding:8px 12px;font-family:Courier New,monospace;font-size:11px;color:#0d6efd;border-right:1px solid #eee;border-bottom:1px solid #eee;">' + esc_(p.codigoLm || '—') + '</td>'
-        + '<td style="padding:8px 12px;font-size:12px;font-weight:bold;color:' + colorSec + ';border-bottom:1px solid #eee;">' + esc_(p.seccion || '') + nota + '</td>'
+        + '<td style="padding:8px 12px;font-size:12px;font-weight:bold;color:' + colorSec + ';border-right:1px solid #eee;border-bottom:1px solid #eee;">' + esc_(p.seccion || '') + nota + '</td>'
+        + solHtml
         + '</tr>';
     }).join('');
 
@@ -81,7 +93,8 @@ function htmlInformeCarga(idCarga) {
       + '<tr style="background:#f3f4f6;"><th style="padding:8px 10px;font-size:10px;color:#64748b;">#</th>'
       + '<th style="padding:8px 12px;font-size:10px;color:#64748b;text-align:left;">SSCC</th>'
       + '<th style="padding:8px 12px;font-size:10px;color:#64748b;text-align:left;">CÓDIGO LM</th>'
-      + '<th style="padding:8px 12px;font-size:10px;color:#64748b;text-align:left;">SECCIÓN</th></tr>'
+      + '<th style="padding:8px 12px;font-size:10px;color:#64748b;text-align:left;">SECCIÓN</th>'
+      + '<th style="padding:8px 12px;font-size:10px;color:#64748b;text-align:left;">SOLICITADO POR</th></tr>'
       + filasSie
       + '</table></td></tr>';
   }
@@ -118,7 +131,8 @@ function htmlInformeCarga(idCarga) {
     + '<th style="padding:8px 12px;font-size:10px;color:#64748b;text-align:left;">Nº PEDIDO</th>'
     + '<th style="padding:8px 12px;font-size:10px;color:#64748b;text-align:left;">ID ÚNICO</th>'
     + '<th style="padding:8px 12px;font-size:10px;color:#64748b;text-align:left;">ORIGEN</th>'
-    + '<th style="padding:8px 12px;font-size:10px;color:#64748b;text-align:left;">CARGADO</th></tr>'
+    + '<th style="padding:8px 12px;font-size:10px;color:#64748b;text-align:left;">CARGADO</th>'
+    + '<th style="padding:8px 12px;font-size:10px;color:#64748b;text-align:left;">SOLICITADO POR</th></tr>'
     + filas
     + '</table></td></tr>'
     + '<tr><td style="padding:10px 20px;font-size:10px;color:#999;">Total soportes: ' + carga.escaneados.length + ' &middot; Carga ' + esc_(idCarga) + '</td></tr>'
