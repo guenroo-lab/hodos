@@ -613,3 +613,19 @@ test('cerrarCarga: un fallo en el cotejo SIE se devuelve como aviso al cliente, 
   assert.strictEqual(r.avisosSie.length, 1);
   assert.match(r.avisosSie[0], /Drive SIE no responde/);
 });
+
+test('buscarEtiquetas: devuelve expedicion y creadoPor (Panel Arrastres agrupa su listado por expedición)', () => {
+  const ctx = contextoBackend({
+    leerEtiquetas_: () => [
+      filaBase({ expedicion: '73142', creadoPor: 'MacroArrastres (Antequera) · pedro', fechaCreacion: new Date().toISOString() }),
+      filaBase({ expedicion: null, creadoPor: null, fechaCreacion: new Date().toISOString() })
+    ],
+    leerCargas_: () => [],
+    leerTodoContenidoCrudo_: () => []
+  });
+  const r = ctx.buscarEtiquetas({});
+  assert.strictEqual(r[0].expedicion, '73142');
+  assert.strictEqual(r[0].creadoPor, 'MacroArrastres (Antequera) · pedro');
+  assert.strictEqual(r[1].expedicion, '', 'sin expedición -> texto vacío, no null');
+  assert.strictEqual(r[1].creadoPor, '');
+});

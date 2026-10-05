@@ -284,6 +284,9 @@ function buscarEtiquetas(filtros) {
       idUnico: f.idUnico, numeroPedido: f.numeroPedido, soporteNum: f.soporteNum, soporteTotal: f.soporteTotal,
       origen: f.origen, subtipo: f.subtipo, origenTienda: f.origenTienda, razonFlujo: f.razonFlujo,
       origenTexto: f.origenTexto, destino: f.destino, fechaCreacion: fechaComoTexto(f.fechaCreacion),
+      // Expedición (solo la mandan las integraciones de arrastres) y quién creó la etiqueta: Panel Arrastres
+      // agrupa su listado de Hodos por expedición. Siempre texto ('' si no hay), nunca null.
+      expedicion: f.expedicion || '', creadoPor: f.creadoPor || '',
       estado: f.estado, bateaId: f.bateaId, fechaCargado: fechaComoTexto(f.fechaEnvio),
       fechaLlegada: carga ? carga.fechaEntrega : '', horarioLlegada: carga ? carga.horario : '',
       contenido: mapaContenido[f.idUnico] || []
