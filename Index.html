@@ -5,6 +5,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HODOS - Taisa Logistics</title>
+  <!-- Tema antes del primer pintado (evita el parpadeo de color). Por defecto: Fresh Prince, oscuro. -->
+  <script>
+    (function () {
+      var m = 'dark', t = 'retro80s';
+      try {
+        m = localStorage.getItem('hodos_mode_pick') || 'dark';
+        t = localStorage.getItem('hodos_theme_pick') || 'retro80s';
+      } catch (e) {}
+      if (m !== 'dark' && m !== 'light' && m !== 'auto') m = 'dark';
+      if (['retro80s', 'taisa', 'obsidiana', 'oceano'].indexOf(t) === -1) t = 'retro80s';
+      var res = m;
+      if (m === 'auto') {
+        try { res = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+        catch (e) { res = 'dark'; }
+      }
+      document.documentElement.setAttribute('data-kmode', res);
+      document.documentElement.setAttribute('data-ktheme', t);
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -17,12 +36,41 @@
       display:flex;
       flex-direction:column;
     }
-    /* --color-accent-text: variante del acento pensada para texto sobre --bg-primary.
-       El rojo de marca (#e30613) da 4.05:1 sobre el fondo oscuro — por debajo del
-       mínimo WCAG AA de 4.5:1 para texto normal — así que aquí se usa un rojo
-       ligeramente más claro (#eb3840, 4.87:1) solo para texto; fondos, botones y
-       bordes siguen usando --color-accent tal cual. */
-    body.tema-black { --bg-primary:#080a10; --bg-panel:#11141d; --color-accent:#e30613; --color-accent-text:#eb3840; --color-error:#ff6b6b; --text-primary:#fff; --input-bg:#1a1d2e; --input-border:#565d80; }
+    /* ══════════ TEMAS: modo (Auto/Oscuro/Claro) x estilo (Fresh Prince/Taisa/Obsidiana/Océano) ══════════
+       Mismo sistema que el Hub de Herramientas: <html data-kmode="dark|light" data-ktheme="...">.
+       Taisa, Obsidiana y Océano son las paletas del Hub traducidas a las 8 variables de HODOS;
+       Fresh Prince es el retro 80s que ya tenía HODOS (índigo + rosa neón sobre morado casi negro).
+       --on-accent = color del texto SOBRE un fondo --color-accent (blanco, o casi negro en los
+       acentos claros de Obsidiana/Océano oscuros). --color-accent-text = el acento pensado para
+       TEXTO sobre las superficies: en cada combinación están comprobados 4,5:1 de contraste para
+       texto, 7:1 para el cuerpo y 3:1 para los bordes de campos. */
+    :root { color-scheme:dark;
+      --bg-panel:#0b0718; --bg-primary:#160f2b; --input-bg:#1e1638; --input-border:#6a5ec4;
+      --text-primary:#ffffff; --color-accent:#3B2F85; --on-accent:#ffffff; --color-accent-text:#FF1493; --color-error:#FF4136; }
+    [data-kmode="dark"][data-ktheme="retro80s"] { color-scheme:dark;
+      --bg-panel:#0b0718; --bg-primary:#160f2b; --input-bg:#1e1638; --input-border:#6a5ec4;
+      --text-primary:#ffffff; --color-accent:#3B2F85; --on-accent:#ffffff; --color-accent-text:#FF1493; --color-error:#FF4136; }
+    [data-kmode="light"][data-ktheme="retro80s"] { color-scheme:light;
+      --bg-panel:#e9e4f2; --bg-primary:#f6f3fb; --input-bg:#fdfcff; --input-border:#8b83ad;
+      --text-primary:#1f1b33; --color-accent:#3B2F85; --on-accent:#ffffff; --color-accent-text:#b80f68; --color-error:#b71c1c; }
+    [data-kmode="dark"][data-ktheme="taisa"] { color-scheme:dark;
+      --bg-panel:#06080e; --bg-primary:#11151f; --input-bg:#1a2030; --input-border:#6a7394;
+      --text-primary:#eef2fb; --color-accent:#e30613; --on-accent:#ffffff; --color-accent-text:#ff6b72; --color-error:#ff6b6b; }
+    [data-kmode="light"][data-ktheme="taisa"] { color-scheme:light;
+      --bg-panel:#e7e3da; --bg-primary:#f5f2ea; --input-bg:#fbfaf6; --input-border:#8c8472;
+      --text-primary:#23252d; --color-accent:#c0121e; --on-accent:#ffffff; --color-accent-text:#b00e19; --color-error:#b71c1c; }
+    [data-kmode="dark"][data-ktheme="obsidiana"] { color-scheme:dark;
+      --bg-panel:#0a0a0d; --bg-primary:#141318; --input-bg:#1e1c24; --input-border:#7a7390;
+      --text-primary:#f4f0e6; --color-accent:#cfa65a; --on-accent:#1b1405; --color-accent-text:#e8cc8f; --color-error:#ff6b6b; }
+    [data-kmode="light"][data-ktheme="obsidiana"] { color-scheme:light;
+      --bg-panel:#e9e4d8; --bg-primary:#f6f2e7; --input-bg:#fbf9f2; --input-border:#8e8670;
+      --text-primary:#26221a; --color-accent:#7d5810; --on-accent:#ffffff; --color-accent-text:#7a5410; --color-error:#b71c1c; }
+    [data-kmode="dark"][data-ktheme="oceano"] { color-scheme:dark;
+      --bg-panel:#061018; --bg-primary:#0c1d2b; --input-bg:#12293a; --input-border:#5a88a6;
+      --text-primary:#e8f4fb; --color-accent:#0ea5e9; --on-accent:#031520; --color-accent-text:#7dd3fc; --color-error:#ff6b6b; }
+    [data-kmode="light"][data-ktheme="oceano"] { color-scheme:light;
+      --bg-panel:#dfe7ec; --bg-primary:#eef4f7; --input-bg:#f8fbfc; --input-border:#6f8898;
+      --text-primary:#14232e; --color-accent:#0369a1; --on-accent:#ffffff; --color-accent-text:#045d8d; --color-error:#b71c1c; }
     body { background:var(--bg-panel); color:var(--text-primary); }
 
     button, input, select { font-family:inherit; }
@@ -69,7 +117,7 @@
     .app-sidebar button > svg, .app-sidebar button > span:not(.tab-badge) { opacity:0.65; transition:opacity 180ms ease; }
     .app-sidebar button:hover > svg, .app-sidebar button:hover > span:not(.tab-badge) { opacity:0.9; }
     .app-sidebar button:hover { background:var(--input-bg); }
-    .app-sidebar button.active { background:var(--color-accent); color:#fff; }
+    .app-sidebar button.active { background:var(--color-accent); color:var(--on-accent); }
     .app-sidebar button.active > svg, .app-sidebar button.active > span:not(.tab-badge) { opacity:1; }
 
     .sidebar-rotulo {
@@ -148,7 +196,7 @@
 
     .btn-primary, .btn-imprimir, .busqueda-form button {
       display:flex; align-items:center; justify-content:center; gap:8px;
-      padding:13px; min-height:44px; background:var(--color-accent); color:#fff;
+      padding:13px; min-height:44px; background:var(--color-accent); color:var(--on-accent);
       border:none; border-radius:8px; font-size:14px; font-weight:700; cursor:pointer;
     }
     .btn-primary, .btn-imprimir { width:100%; margin-top:10px; }
@@ -208,7 +256,7 @@
       background:var(--input-bg); border:2px solid var(--input-border);
       display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;
     }
-    .camion-stepper .paso.activo .num { background:var(--color-accent); border-color:var(--color-accent); color:#fff; }
+    .camion-stepper .paso.activo .num { background:var(--color-accent); border-color:var(--color-accent); color:var(--on-accent); }
     .camion-stepper .paso.hecho .num { background:#147638; border-color:#147638; color:#fff; }
     .camion-stepper .paso .etiqueta { font-size:12.5px; font-weight:600; white-space:nowrap; }
     .camion-stepper .linea { flex:1; height:2px; background:var(--input-border); margin:0 10px; }
@@ -229,7 +277,7 @@
     .fecha-chip.fecha-chip-otra { border-style:dashed; }
 
     /* ── Modo manual en el escaneo (Cargar camión) ── */
-    .btn-modo-manual.activo { background:var(--color-accent); border-color:var(--color-accent); color:#fff; }
+    .btn-modo-manual.activo { background:var(--color-accent); border-color:var(--color-accent); color:var(--on-accent); }
 
     /* ── Panel de carga masiva (Cargar camión, acceso por gesto oculto) ── */
     /* El gesto se activa manteniendo pulsado #camionTitulo — sin esto, un móvil
@@ -270,7 +318,7 @@
     .tabla-titulo { display:flex; align-items:center; gap:8px; margin:20px 4px 10px; font-weight:700; font-size:14px; }
     .tabla-titulo .tabla-contador { margin-left:auto; opacity:0.6; font-weight:600; font-size:12px; }
     .badge-origen { display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:0.5px; color:#fff; }
-    .badge-origen-hodos { background:var(--color-accent); }
+    .badge-origen-hodos { background:var(--color-accent); color:var(--on-accent); }
     .badge-origen-sie { background:#2f8fd6; }
     /* Lista compacta de soportes/palets ya escaneados: una sola línea por fila (no la
        simulación de tabla en tarjeta de .resultados-tabla, que en móvil ocupaba 3 líneas
@@ -320,42 +368,12 @@
 
     .aviso-tienda-invalida { max-width:600px; margin:60px auto; text-align:center; padding:30px; background:var(--bg-primary); border:1px solid var(--input-border); border-radius:10px; }
 
-    /* ══════════════════════════════════════════════════════════════════
-       Tema adicional: "Retro 80s Color-Block" (rompevientos deportivo)
-       ══════════════════════════════════════════════════════════════════
-       Se activa con [data-theme="retro80s"] en <html> — un atributo
-       INDEPENDIENTE de la clase tema-black/vivid/gray de <body> (esa clase
-       la reemplaza por completo cambiarTema(), así que no se puede colgar
-       nada de ahí sin que se borre en el próximo ciclo). No sustituye a los
-       temas existentes: es un cuarto tema seleccionable con su propio botón
-       fijo (#retroThemeBtn), y se puede desactivar para volver exactamente
-       al tema que hubiera antes.
-
-       Restricción de legibilidad: fondos/texto siguen el mismo patrón de
-       alto contraste que ya usa "Black Edition" (superficie casi negra +
-       texto blanco) — tablas de datos, formularios y texto de cuerpo NO
-       llevan colores vivos de fondo, solo la superficie neutra oscura.
-       El acento interactivo (botones, pestaña activa, badge origen) usa el
-       morado/índigo de la paleta en vez de un rosa/amarillo/turquesa
-       saturado, porque comprobado contra blanco (fondo real de esos
-       botones) el índigo da >10:1 de contraste y el resto de la paleta
-       vivida se queda entre 3:1 y 4:1 — insuficiente para texto normal
-       (WCAG AA exige 4.5:1). El rosa neón sí se usa como COLOR DE TEXTO
-       sobre el fondo oscuro (cabeceras de sección, texto de tabla, IDs) —
-       ahí compensa 5.7:1, de sobra. El resto de la paleta (turquesa,
-       amarillo, rojo) se reserva para las bandas decorativas diagonales,
-       donde no hay texto encima. */
-    html[data-theme="retro80s"] body {
-      --bg-primary:#160f2b; --bg-panel:#0b0718; --color-accent:#3B2F85;
-      --color-accent-text:#FF1493; --color-error:#FF4136; --text-primary:#fff;
-      --input-bg:#1e1638; --input-border:#5b4fb0;
-    }
-
-    /* Banda decorativa diagonal (bloques de color con paradas duras, sin
-       degradado difuminado) — puramente ornamental, nunca lleva texto
-       encima, así que no le afecta la restricción de contraste. */
+    /* ══════════ Fresh Prince: franja decorativa bajo la cabecera ══════════
+       Bloques de color con paradas duras (rompevientos de los 80), puramente ornamental:
+       nunca lleva texto encima, así que no le afecta ninguna regla de contraste. Solo se
+       ve con el estilo Fresh Prince (en cualquier modo). */
     .retro-stripe { display:none; height:10px; flex-shrink:0; }
-    html[data-theme="retro80s"] .retro-stripe {
+    [data-ktheme="retro80s"] .retro-stripe {
       display:block;
       background:linear-gradient(135deg,
         #FF1493 0%, #FF1493 20%,
@@ -365,32 +383,45 @@
         #FF2400 80%, #FF2400 100%);
     }
 
-    /* Botón fijo para alternar el tema Retro 80s. Esquina inferior derecha
-       a propósito: lejos de la cabecera (donde vive el toggle Black/Vivid/
-       Gris), de la barra lateral de pestañas y de los formularios/tablas
-       de escaneo, para no interferir con el uso táctil habitual. */
-    .retro-toggle-btn {
-      position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom, 0px));
-      z-index:500; width:50px; height:50px; border-radius:50%;
-      border:2px solid rgba(255,255,255,0.85); cursor:pointer; padding:0;
-      display:flex; align-items:center; justify-content:center;
-      background:linear-gradient(135deg,
-        #FF1493 0%, #FF1493 20%,
-        #00C5B5 20%, #00C5B5 40%,
-        #3B2F85 40%, #3B2F85 60%,
-        #FFD700 60%, #FFD700 80%,
-        #FF2400 80%, #FF2400 100%);
-      box-shadow:0 4px 14px rgba(0,0,0,0.45);
-      font-family:'Bebas Neue', sans-serif; font-size:13px; letter-spacing:0.5px;
-      color:#fff; text-shadow:0 1px 3px rgba(0,0,0,0.85);
-      transition:transform 0.15s;
+    /* ══════════ Selector de tema (modo + estilo), copiado del Hub de Herramientas ══════════ */
+    .theme-wrap { position:relative; flex-shrink:0; }
+    .theme-btn {
+      height:38px; padding:0 13px; display:inline-flex; align-items:center; gap:8px;
+      border-radius:11px; border:1px solid var(--input-border); background:var(--input-bg);
+      color:var(--text-primary); font-size:13px; font-weight:600; cursor:pointer;
     }
-    .retro-toggle-btn:active { transform:scale(0.9); }
-    .retro-toggle-btn.activo { border-color:#fff; box-shadow:0 4px 18px rgba(255,20,147,0.65); }
-    .retro-toggle-btn:not(.activo) { opacity:0.6; filter:grayscale(0.55); }
+    .theme-btn:hover { border-color:var(--color-accent-text); }
+    .theme-panel {
+      display:none; position:absolute; right:0; top:calc(100% + 10px); z-index:700;
+      width:min(340px, calc(100vw - 32px)); background:var(--bg-primary);
+      border:1px solid var(--input-border); border-radius:14px; padding:14px;
+      box-shadow:0 18px 50px rgba(0,0,0,0.45);
+    }
+    .theme-panel.abierto { display:block; }
+    .picker-row { display:flex; align-items:center; flex-wrap:wrap; gap:7px; margin-bottom:10px; }
+    .picker-row:last-child { margin-bottom:0; }
+    .picker-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; opacity:0.75; width:52px; flex:none; }
+    .pick {
+      display:inline-flex; align-items:center; gap:7px; padding:8px 12px 8px 10px; min-height:36px;
+      border-radius:50px; background:var(--input-bg); border:1px solid var(--input-border);
+      color:var(--text-primary); font-size:12.5px; font-weight:600; cursor:pointer;
+    }
+    .pick:hover { border-color:var(--color-accent-text); }
+    .pick[aria-pressed="true"] { border-color:var(--color-accent-text); color:var(--color-accent-text); box-shadow:inset 0 0 0 1px var(--color-accent-text); }
+    .pick svg.icon { width:14px; height:14px; }
+    .pick .dot { width:13px; height:13px; border-radius:50%; flex:none; }
+    .pick[data-for="taisa"] .dot { background:#e30613; }
+    .pick[data-for="obsidiana"] .dot { background:linear-gradient(135deg, #f0d9a8, #b88a3c 55%, #3a2f18); }
+    .pick[data-for="oceano"] .dot { background:linear-gradient(135deg, #bdeeff, #38bdf8 55%, #0b3a5c); }
+    .pick[data-for="retro80s"] .dot {
+      background:linear-gradient(135deg,
+        #FF1493 0%, #FF1493 20%, #00C5B5 20%, #00C5B5 40%, #3B2F85 40%, #3B2F85 60%,
+        #FFD700 60%, #FFD700 80%, #FF2400 80%, #FF2400 100%);
+    }
+    @media (max-width:480px) { .theme-btn span { display:none; } .theme-btn { padding:0 11px; } }
   </style>
 </head>
-<body class="tema-black">
+<body>
 
 <div class="app-header">
   <div class="brand">
@@ -400,10 +431,28 @@
       <div class="subtitulo">Taisa Logistics</div>
     </div>
   </div>
+  <div class="theme-wrap">
+    <button class="theme-btn" id="btnTema" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="themePanel" aria-label="Cambiar tema" onclick="temaAlternarPanel_(event)">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg><span>Tema</span>
+    </button>
+    <div class="theme-panel" id="themePanel" role="group" aria-label="Opciones de tema">
+      <div class="picker-row">
+        <span class="picker-label">Modo</span>
+        <button class="pick" type="button" data-mode="auto" aria-pressed="false" onclick="temaSetModo_('auto')"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></svg> Auto</button>
+        <button class="pick" type="button" data-mode="dark" aria-pressed="false" onclick="temaSetModo_('dark')"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> Oscuro</button>
+        <button class="pick" type="button" data-mode="light" aria-pressed="false" onclick="temaSetModo_('light')"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> Claro</button>
+      </div>
+      <div class="picker-row">
+        <span class="picker-label">Estilo</span>
+        <button class="pick" type="button" data-for="retro80s" aria-pressed="false" onclick="temaSetEstilo_('retro80s')"><span class="dot"></span>Fresh Prince</button>
+        <button class="pick" type="button" data-for="taisa" aria-pressed="false" onclick="temaSetEstilo_('taisa')"><span class="dot"></span>Taisa</button>
+        <button class="pick" type="button" data-for="obsidiana" aria-pressed="false" onclick="temaSetEstilo_('obsidiana')"><span class="dot"></span>Obsidiana</button>
+        <button class="pick" type="button" data-for="oceano" aria-pressed="false" onclick="temaSetEstilo_('oceano')"><span class="dot"></span>Océano</button>
+      </div>
+    </div>
+  </div>
 </div>
 <div class="retro-stripe" aria-hidden="true"></div>
-
-<button class="retro-toggle-btn" id="retroThemeBtn" title="Tema Retro 80s Color-Block (adicional, no sustituye al actual)" onclick="toggleRetro()">80s</button>
 
 <div id="avisoTiendaInvalida" class="aviso-tienda-invalida vista-oculta">
   <h2>Enlace no válido</h2>
@@ -892,25 +941,89 @@
     document.getElementById('contadorPedidos').textContent = lineas.length + ' pedido' + (lineas.length !== 1 ? 's' : '') + ' detectado' + (lineas.length !== 1 ? 's' : '');
   });
 
-  // Tema adicional "Retro 80s Color-Block": independiente del tema base (siempre
-  // Black Edition, único que queda tras quitar Vivid/Gris). Usa un atributo
-  // data-theme en <html>, no una clase de <body>, así queda desacoplado del
-  // fondo/superficie base. Es un interruptor on/off que siempre se puede
-  // apagar para volver exactamente a Black Edition.
-  function aplicarRetro_(activo) {
-    if (activo) {
-      document.documentElement.setAttribute('data-theme', 'retro80s');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-    }
-    var btn = document.getElementById('retroThemeBtn');
-    if (btn) btn.classList.toggle('activo', activo);
-    localStorage.setItem('hodosTemaRetro', activo ? '1' : '0');
+  // ── Temas: modo (Auto/Oscuro/Claro) + estilo, copiados del Hub de Herramientas ──
+  // <html data-kmode="dark|light" data-ktheme="..."> lo fija ya el script del <head> antes
+  // del primer pintado (sin parpadeo); aquí vive el selector y el cambio en caliente.
+  // Por defecto: Fresh Prince (retro80s) en oscuro. La elección se guarda en localStorage
+  // de este navegador; si no está disponible, se usa el defecto sin romper nada.
+  var TEMA_ESTILOS_ = ['retro80s', 'taisa', 'obsidiana', 'oceano'];
+  var TEMA_ESTILO_DEFECTO_ = 'retro80s';
+  var TEMA_MODO_DEFECTO_ = 'dark';
+  var TEMA_CLAVE_MODO_ = 'hodos_mode_pick';
+  var TEMA_CLAVE_ESTILO_ = 'hodos_theme_pick';
+
+  function temaLeer_(clave, def) {
+    try { return localStorage.getItem(clave) || def; } catch (e) { return def; }
   }
 
-  function toggleRetro() {
-    var activo = document.documentElement.getAttribute('data-theme') === 'retro80s';
-    aplicarRetro_(!activo);
+  function temaGuardar_(clave, valor) {
+    try { localStorage.setItem(clave, valor); } catch (e) {}
+  }
+
+  function temaResolverModo_(m) {
+    if (m === 'auto') {
+      try { return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+      catch (e) { return 'dark'; }
+    }
+    return m === 'light' ? 'light' : 'dark';
+  }
+
+  function aplicarTema_() {
+    var m = temaLeer_(TEMA_CLAVE_MODO_, TEMA_MODO_DEFECTO_);
+    var t = temaLeer_(TEMA_CLAVE_ESTILO_, TEMA_ESTILO_DEFECTO_);
+    if (m !== 'dark' && m !== 'light' && m !== 'auto') m = TEMA_MODO_DEFECTO_;
+    if (TEMA_ESTILOS_.indexOf(t) === -1) t = TEMA_ESTILO_DEFECTO_;
+
+    document.documentElement.setAttribute('data-kmode', temaResolverModo_(m));
+    document.documentElement.setAttribute('data-ktheme', t);
+
+    document.querySelectorAll('.pick[data-mode]').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-mode') === m ? 'true' : 'false');
+    });
+    document.querySelectorAll('.pick[data-for]').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-for') === t ? 'true' : 'false');
+    });
+  }
+
+  function temaSetModo_(m) { temaGuardar_(TEMA_CLAVE_MODO_, m); aplicarTema_(); }
+  function temaSetEstilo_(t) { temaGuardar_(TEMA_CLAVE_ESTILO_, t); aplicarTema_(); }
+
+  function temaAlternarPanel_(ev) {
+    if (ev) ev.stopPropagation();
+    var panel = document.getElementById('themePanel');
+    var abierto = panel.classList.toggle('abierto');
+    document.getElementById('btnTema').setAttribute('aria-expanded', abierto ? 'true' : 'false');
+  }
+
+  function temaCerrarPanel_(devolverFoco) {
+    var panel = document.getElementById('themePanel');
+    if (!panel || !panel.classList.contains('abierto')) return;
+    panel.classList.remove('abierto');
+    var btn = document.getElementById('btnTema');
+    btn.setAttribute('aria-expanded', 'false');
+    if (devolverFoco) btn.focus();
+  }
+
+  function iniciarTema_() {
+    aplicarTema_();
+    // En modo Auto, seguir al sistema si el usuario cambia entre claro y oscuro.
+    try {
+      var mq = window.matchMedia('(prefers-color-scheme: light)');
+      var alCambiarSistema = function () {
+        if (temaLeer_(TEMA_CLAVE_MODO_, TEMA_MODO_DEFECTO_) === 'auto') aplicarTema_();
+      };
+      if (mq.addEventListener) mq.addEventListener('change', alCambiarSistema);
+      else if (mq.addListener) mq.addListener(alCambiarSistema);
+    } catch (e) {}
+    // El panel se cierra al pulsar fuera de él o con Escape.
+    document.addEventListener('click', function (ev) {
+      var panel = document.getElementById('themePanel');
+      if (!panel || !panel.classList.contains('abierto')) return;
+      if (!panel.parentNode.contains(ev.target)) temaCerrarPanel_(false);
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') temaCerrarPanel_(true);
+    });
   }
 
   function resumenPorPedido_(items) {
@@ -2258,9 +2371,7 @@
   }
 
   function iniciarVista() {
-    // Tema base fijo en Black Edition (clase ya está en <body> en el HTML) — solo
-    // queda restaurar el interruptor independiente Retro 80s.
-    aplicarRetro_(localStorage.getItem('hodosTemaRetro') === '1');
+    iniciarTema_();
 
     if (VISTA === 'operario') {
       document.getElementById('tabBar').classList.add('vista-oculta');
