@@ -56,13 +56,18 @@ test('contraste WCAG de cada combinación: cuerpo 7:1, acento-texto y texto sobr
   }));
 });
 
-test('el estilo por defecto es Fresh Prince (retro80s) en oscuro, en el <head> y en el JS', () => {
-  assert.match(html, /var m = 'dark', t = 'retro80s';/);
+test('el estilo por defecto es Fresh Prince (retro80s) en claro, en el <head> y en el JS', () => {
+  assert.match(html, /var m = 'light', t = 'retro80s';/);
   assert.match(html, /var TEMA_ESTILO_DEFECTO_ = 'retro80s';/);
-  assert.match(html, /var TEMA_MODO_DEFECTO_ = 'dark';/);
-  // :root (lo que se ve si el JS fallara) = Fresh Prince oscuro, no otro estilo
+  assert.match(html, /var TEMA_MODO_DEFECTO_ = 'light';/);
+  // :root (lo que se ve si el JS fallara) = Fresh Prince claro, no otro estilo ni el oscuro.
+  // --color-accent es el mismo en claro y oscuro, así que no basta para distinguirlos:
+  // se comparan también las superficies y el texto, que sí cambian de un modo a otro.
   const raiz = /:root \{[^}]*\}/.exec(html.slice(html.indexOf('TEMAS: modo')))[0];
-  assert.strictEqual(valor(raiz, '--color-accent'), valor(bloqueTema('retro80s', 'dark'), '--color-accent'));
+  const claro = bloqueTema('retro80s', 'light');
+  ['--color-accent', '--bg-panel', '--bg-primary', '--input-bg', '--text-primary', '--color-accent-text'].forEach((variable) => {
+    assert.strictEqual(valor(raiz, variable), valor(claro, variable), variable + ' del :root debe ser el de Fresh Prince claro');
+  });
 });
 
 test('el estilo retro80s se muestra con el nombre Fresh Prince y no queda "Retro 80s" visible', () => {

@@ -5,15 +5,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HODOS - Taisa Logistics</title>
-  <!-- Tema antes del primer pintado (evita el parpadeo de color). Por defecto: Fresh Prince, oscuro. -->
+  <!-- Tema antes del primer pintado (evita el parpadeo de color). Por defecto: Fresh Prince, claro. -->
   <script>
     (function () {
-      var m = 'dark', t = 'retro80s';
+      var m = 'light', t = 'retro80s';
       try {
-        m = localStorage.getItem('hodos_mode_pick') || 'dark';
+        m = localStorage.getItem('hodos_mode_pick') || 'light';
         t = localStorage.getItem('hodos_theme_pick') || 'retro80s';
       } catch (e) {}
-      if (m !== 'dark' && m !== 'light' && m !== 'auto') m = 'dark';
+      if (m !== 'dark' && m !== 'light' && m !== 'auto') m = 'light';
       if (['retro80s', 'taisa', 'obsidiana', 'oceano'].indexOf(t) === -1) t = 'retro80s';
       var res = m;
       if (m === 'auto') {
@@ -44,9 +44,9 @@
        acentos claros de Obsidiana/Océano oscuros). --color-accent-text = el acento pensado para
        TEXTO sobre las superficies: en cada combinación están comprobados 4,5:1 de contraste para
        texto, 7:1 para el cuerpo y 3:1 para los bordes de campos. */
-    :root { color-scheme:dark;
-      --bg-panel:#0b0718; --bg-primary:#160f2b; --input-bg:#1e1638; --input-border:#6a5ec4;
-      --text-primary:#ffffff; --color-accent:#3B2F85; --on-accent:#ffffff; --color-accent-text:#FF1493; --color-error:#FF4136; }
+    :root { color-scheme:light;
+      --bg-panel:#e9e4f2; --bg-primary:#f6f3fb; --input-bg:#fdfcff; --input-border:#8b83ad;
+      --text-primary:#1f1b33; --color-accent:#3B2F85; --on-accent:#ffffff; --color-accent-text:#b80f68; --color-error:#b71c1c; }
     [data-kmode="dark"][data-ktheme="retro80s"] { color-scheme:dark;
       --bg-panel:#0b0718; --bg-primary:#160f2b; --input-bg:#1e1638; --input-border:#6a5ec4;
       --text-primary:#ffffff; --color-accent:#3B2F85; --on-accent:#ffffff; --color-accent-text:#FF1493; --color-error:#FF4136; }
@@ -944,11 +944,11 @@
   // ── Temas: modo (Auto/Oscuro/Claro) + estilo, copiados del Hub de Herramientas ──
   // <html data-kmode="dark|light" data-ktheme="..."> lo fija ya el script del <head> antes
   // del primer pintado (sin parpadeo); aquí vive el selector y el cambio en caliente.
-  // Por defecto: Fresh Prince (retro80s) en oscuro. La elección se guarda en localStorage
+  // Por defecto: Fresh Prince (retro80s) en claro. La elección se guarda en localStorage
   // de este navegador; si no está disponible, se usa el defecto sin romper nada.
   var TEMA_ESTILOS_ = ['retro80s', 'taisa', 'obsidiana', 'oceano'];
   var TEMA_ESTILO_DEFECTO_ = 'retro80s';
-  var TEMA_MODO_DEFECTO_ = 'dark';
+  var TEMA_MODO_DEFECTO_ = 'light';
   var TEMA_CLAVE_MODO_ = 'hodos_mode_pick';
   var TEMA_CLAVE_ESTILO_ = 'hodos_theme_pick';
 
