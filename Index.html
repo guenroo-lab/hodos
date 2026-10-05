@@ -60,10 +60,17 @@
     .app-sidebar button {
       display:flex; align-items:center; gap:12px; padding:13px 14px; min-height:44px;
       border:none; background:transparent; color:var(--text-primary); border-radius:8px;
-      cursor:pointer; font-size:14px; font-weight:600; text-align:left; opacity:0.65;
+      cursor:pointer; font-size:14px; font-weight:600; text-align:left;
     }
-    .app-sidebar button:hover { opacity:0.9; background:var(--input-bg); }
-    .app-sidebar button.active { background:var(--color-accent); color:#fff; opacity:1; }
+    /* La atenuación de las pestañas inactivas va en el icono y el texto, no en el botón
+       entero: con opacity en el botón la insignia de etiquetas pendientes (hija suya)
+       también se apagaba, y un aviso no debe atenuarse. Mismos valores de siempre
+       (0.65 / 0.9 al pasar el ratón / 1 activa). */
+    .app-sidebar button > svg, .app-sidebar button > span:not(.tab-badge) { opacity:0.65; transition:opacity 180ms ease; }
+    .app-sidebar button:hover > svg, .app-sidebar button:hover > span:not(.tab-badge) { opacity:0.9; }
+    .app-sidebar button:hover { background:var(--input-bg); }
+    .app-sidebar button.active { background:var(--color-accent); color:#fff; }
+    .app-sidebar button.active > svg, .app-sidebar button.active > span:not(.tab-badge) { opacity:1; }
 
     .sidebar-rotulo {
       margin:14px 0 2px; padding:0 14px; font-size:11px; font-weight:700;
@@ -71,6 +78,16 @@
       color:var(--text-primary);
     }
     .app-sidebar button.sub { padding-left:30px; font-size:13.5px; }
+
+    /* Insignia numérica = etiquetas pendientes de imprimir de esa pestaña (solo se
+       muestra si hay alguna). Ámbar con texto casi negro (≈12:1) en vez de un color de
+       tema: tiene que verse igual sobre el fondo oscuro, sobre la pestaña activa y en
+       el tema Retro 80s, donde --color-accent es un índigo que se camuflaría. */
+    .app-sidebar button .tab-badge {
+      margin-left:auto; flex-shrink:0; min-width:22px; padding:2px 7px; border-radius:999px;
+      background:#ffc107; color:#111; font-size:11.5px; font-weight:700; line-height:1.3;
+      text-align:center; font-variant-numeric:tabular-nums;
+    }
 
     .app-main { flex:1; min-width:0; overflow-y:auto; padding:28px; }
 
@@ -83,6 +100,9 @@
       .app-sidebar button { flex:1; justify-content:center; padding:10px 6px; font-size:12.5px; }
       .sidebar-rotulo { display:none; }
       .app-sidebar button.sub { padding-left:6px; }
+      /* En fila, la insignia flota en la esquina del botón en vez de empujar el texto. */
+      .app-sidebar button { position:relative; }
+      .app-sidebar button .tab-badge { position:absolute; top:2px; right:2px; margin:0; min-width:18px; padding:1px 5px; font-size:10.5px; }
       .app-main { padding:18px; }
     }
 
@@ -407,27 +427,33 @@
     <button data-tab="incpc" onclick="cambiarPestana('incpc')">
       <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       <span>Incidencias PedidoCliente</span>
+      <span class="tab-badge vista-oculta" id="badge-incpc"></span>
     </button>
     <button data-tab="preparacion" onclick="cambiarPestana('preparacion')">
       <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       <span>Peticiones de Reserva</span>
+      <span class="tab-badge vista-oculta" id="badge-preparacion"></span>
     </button>
     <div class="sidebar-rotulo">Arrastres</div>
     <button class="sub" data-tab="meco" onclick="cambiarPestana('meco')">
       <svg class="icon" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
       <span>Meco</span>
+      <span class="tab-badge vista-oculta" id="badge-meco"></span>
     </button>
     <button class="sub" data-tab="valencia" onclick="cambiarPestana('valencia')">
       <svg class="icon" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
       <span>Valencia</span>
+      <span class="tab-badge vista-oculta" id="badge-valencia"></span>
     </button>
     <button class="sub" data-tab="torija" onclick="cambiarPestana('torija')">
       <svg class="icon" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
       <span>Torija</span>
+      <span class="tab-badge vista-oculta" id="badge-torija"></span>
     </button>
     <button class="sub" data-tab="antequera" onclick="cambiarPestana('antequera')">
       <svg class="icon" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
       <span>Antequera</span>
+      <span class="tab-badge vista-oculta" id="badge-antequera"></span>
     </button>
   </nav>
 
@@ -1176,9 +1202,68 @@
     });
   }
 
+  // ── Insignias numéricas de la barra lateral: etiquetas pendientes de imprimir ──
+  // Cada pestaña con cola de impresión muestra cuántas tiene. Dos fuentes, y la lista
+  // manda: (1) cada vez que se carga la lista de una pestaña, su insignia pasa a ser
+  // exactamente lo que acaba de listar; (2) una consulta ligera aparte
+  // (contarEtiquetasPendientesPorPestana) refresca las seis a la vez al cambiar de
+  // pestaña, al volver a la ventana y cada minuto, porque las etiquetas las crean
+  // otros sistemas (INCPC, Kairos, MacroArrastres) sin que esta pantalla se entere.
+  var PESTANAS_CON_COLA_ = ['incpc', 'preparacion', 'meco', 'valencia', 'torija', 'antequera'];
+  var INTERVALO_BADGES_MS_ = 60000;
+  var secuenciaBadges_ = 0;       // contador monótono: ordena "cuándo" ocurre cada cosa
+  var badgeDeListaSeq_ = {};      // pestaña -> secuencia de la última vez que su lista fijó su insignia
+  var badgesEnCurso_ = false;
+  var badgesIntervalo_ = null;
+
+  function pintarBadge_(tab, cantidad) {
+    var el = document.getElementById('badge-' + tab);
+    if (!el) return;
+    var n = Number(cantidad) || 0;
+    el.textContent = n > 99 ? '99+' : String(n);
+    el.title = n + ' etiqueta(s) pendiente(s) de imprimir';
+    el.classList.toggle('vista-oculta', n === 0);
+  }
+
+  function pintarBadgeDeLista_(tab, cantidad) {
+    badgeDeListaSeq_[tab] = ++secuenciaBadges_;
+    pintarBadge_(tab, cantidad);
+  }
+
+  function actualizarBadges_() {
+    if (badgesEnCurso_) return;
+    badgesEnCurso_ = true;
+    var inicio = ++secuenciaBadges_;
+    gas('contarEtiquetasPendientesPorPestana').then(function (cuentas) {
+      PESTANAS_CON_COLA_.forEach(function (tab) {
+        // Si la lista de esa pestaña se cargó mientras esta consulta estaba en vuelo,
+        // su dato es más reciente que el de la consulta: no se pisa (si no, imprimir
+        // todo y ver reaparecer el número viejo parecería un fallo).
+        if ((badgeDeListaSeq_[tab] || 0) > inicio) return;
+        pintarBadge_(tab, cuentas ? cuentas[tab] : 0);
+      });
+    }).catch(function (err) {
+      // Un fallo al contar nunca debe molestar: se queda lo que hubiera y se reintenta.
+      console.error('No se pudieron actualizar los avisos de etiquetas pendientes:', err);
+    }).then(function () {
+      badgesEnCurso_ = false;
+    });
+  }
+
+  function iniciarRefrescoBadges_() {
+    if (badgesIntervalo_ !== null) return;
+    badgesIntervalo_ = setInterval(function () {
+      if (!document.hidden) actualizarBadges_();
+    }, INTERVALO_BADGES_MS_);
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) actualizarBadges_();
+    });
+  }
+
   function cargarIncpc_() {
     document.getElementById('resultadosIncpc').innerHTML = '<p class="cargando-resultados">Cargando…</p>';
     gas('obtenerEtiquetasPendientesIncpc').then(function (filas) {
+      pintarBadgeDeLista_('incpc', filas ? filas.length : 0);
       document.getElementById('btnImprimirIncpc').disabled = !filas || filas.length === 0;
       document.getElementById('contadorIncpc').textContent =
         (filas ? filas.length : 0) + ' etiqueta(s) de INCPC pendiente(s) de imprimir';
@@ -1206,6 +1291,7 @@
   function cargarPreparacion_() {
     document.getElementById('resultadosPreparacion').innerHTML = '<p class="cargando-resultados">Cargando…</p>';
     gas('obtenerEtiquetasPendientesPreparacion').then(function (filas) {
+      pintarBadgeDeLista_('preparacion', filas ? filas.length : 0);
       document.getElementById('btnImprimirPreparacion').disabled = !filas || filas.length === 0;
       document.getElementById('contadorPreparacion').textContent =
         (filas ? filas.length : 0) + ' etiqueta(s) de Preparación de Pedidos pendiente(s) de imprimir';
@@ -1244,6 +1330,7 @@
     var cfg = ARRASTRES_[tab];
     document.getElementById('resultados' + cfg.sufijo).innerHTML = '<p class="cargando-resultados">Cargando…</p>';
     gas('obtenerEtiquetasPendientesArrastre', cfg.origen).then(function (filas) {
+      pintarBadgeDeLista_(tab, filas ? filas.length : 0);
       document.getElementById('btnImprimir' + cfg.sufijo).disabled = !filas || filas.length === 0;
       document.getElementById('contador' + cfg.sufijo).textContent =
         (filas ? filas.length : 0) + ' etiqueta(s) de ' + cfg.titulo + ' pendiente(s) de imprimir';
@@ -2146,6 +2233,7 @@
     if (nombre === 'incpc') { cargarIncpc_(); }
     if (nombre === 'preparacion') { cargarPreparacion_(); }
     if (ARRASTRES_[nombre]) { cargarArrastre_(nombre); }
+    actualizarBadges_();
   }
 
   function iniciarVistaOperario_() {
@@ -2195,6 +2283,7 @@
       buscarYMostrar('tienda');
     } else {
       document.getElementById('vistaCamion').classList.add('vista-oculta');
+      iniciarRefrescoBadges_();
       if (VISTA === 'interno') { cambiarPestana('interno'); }
       else if (VISTA === 'incpc') { cambiarPestana('incpc'); }
       else { cambiarPestana('carga'); }

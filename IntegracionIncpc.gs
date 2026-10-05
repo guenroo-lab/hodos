@@ -472,6 +472,34 @@ function marcarImpresasArrastre(origen) {
   return { cantidad: actualizadas.length };
 }
 
+// ── Insignias numéricas de la barra lateral de Index.html: cuántas etiquetas
+// pendientes de imprimir tiene cada pestaña con cola de impresión. Una sola consulta
+// ligera (solo origen+subtipo de las filas con la bandera activa) en vez de llamar a
+// las seis obtenerEtiquetasPendientes*, que releen la tabla `etiquetas` entera cada una.
+//
+// Cada pestaña cuenta EXACTAMENTE lo que lista (mismos criterios que
+// obtenerEtiquetasPendientesIncpc/Preparacion/Arrastre), así la cifra de la insignia y
+// la de la lista no pueden discrepar. Por eso no es un reparto exclusivo: una fila
+// "Petición Reserva" con origen de arrastre (no debería existir) saldría en las dos
+// pestañas, igual que sale en las dos listas. Las claves son las de data-tab/ARRASTRES_. ──
+function contarPendientesPorPestana_(filas) {
+  var cuentas = { incpc: 0, preparacion: 0, meco: 0, valencia: 0, torija: 0, antequera: 0 };
+  filas.forEach(function (f) {
+    var esArrastre = ORIGENES_ARRASTRE_.indexOf(f.origen) !== -1;
+    if (f.subtipo === SUBTIPO_PREPARACION_PEDIDOS_) cuentas.preparacion++;
+    else if (!esArrastre) cuentas.incpc++;
+    if (esArrastre) cuentas[String(f.origen).toLowerCase()]++;
+  });
+  return cuentas;
+}
+
+function contarEtiquetasPendientesPorPestana() {
+  // order=id_unico.asc: orden estable entre páginas de supaGet_ (ver nota en
+  // buscarEtiquetas), por si algún día hay más de 1000 pendientes.
+  var filas = supaGet_('etiquetas', 'pendiente_impresion_incpc=eq.true&order=id_unico.asc', 'origen,subtipo');
+  return contarPendientesPorPestana_(filas);
+}
+
 // Alias históricos de Meco: los mantiene vivos porque Index.html y cualquier
 // despliegue anterior pueden seguir llamándolos.
 function obtenerEtiquetasPendientesMeco() { return obtenerEtiquetasPendientesArrastre('MECO'); }
