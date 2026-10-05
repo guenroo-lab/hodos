@@ -25,6 +25,14 @@ function doPost(e) {
       respuesta = { ok: true, resultado: marcarImpresasArrastre(datos.origen) };
     } else if (datos.accion === 'borrarEtiquetasArrastre') {
       respuesta = { ok: true, resultado: borrarSoportesAdmin(datos.idsUnicos) };
+    // Imprimir las "Petición Reserva" desde fuera de HODOS (Kairos, pestaña HODOS
+    // del jefe, 2026-10-05): la etiqueta sale IGUAL que desde la pestaña "Prep.
+    // Pedidos" porque la genera este mismo código (htmlUnaEtiqueta_); solo cambia
+    // que se piden por id en vez de "todas las pendientes".
+    } else if (datos.accion === 'htmlEtiquetasPreparacion') {
+      respuesta = { ok: true, html: htmlEtiquetasPreparacionPorIds_(datos.idsUnicos) };
+    } else if (datos.accion === 'marcarImpresasPreparacion') {
+      respuesta = { ok: true, resultado: marcarImpresasPreparacionPorIds_(datos.idsUnicos) };
     } else {
       var idUnico = crearEtiquetaDesdeIncpc_(datos);
       respuesta = { ok: true, idUnico: idUnico };
@@ -377,6 +385,64 @@ function htmlPendientesPreparacion() {
 function marcarImpresasPreparacion() {
   var actualizadas = supaActualizar_('etiquetas', 'pendiente_impresion_incpc=eq.true&subtipo=eq.' + encodeURIComponent(SUBTIPO_PREPARACION_PEDIDOS_), { pendiente_impresion_incpc: false });
   return { cantidad: actualizadas.length };
+}
+
+// ── Peticiones de Reserva pedidas POR ID (desde Kairos, vía webhook) ──
+// Imprimir "todas las pendientes" (htmlPendientesPreparacion + marcarImpresasPreparacion)
+// tiene un hueco: si se crea una etiqueta entre generar el HTML y marcar, queda marcada
+// como impresa sin haberse impreso. Pedir exactamente los ids que se imprimen lo evita.
+// Solo etiquetas de subtipo "Petición Reserva": este canal no sirve para ninguna otra.
+var MAX_IDS_PREPARACION_ = 200;
+var TROZO_IDS_PREPARACION_ = 30; // la URL de UrlFetchApp admite ~2 KB
+
+function _idsUnicosPreparacion_(idsUnicos) {
+  if (!Array.isArray(idsUnicos) || !idsUnicos.length) throw new Error('Faltan los ids de las etiquetas');
+  var vistos = {};
+  var ids = [];
+  idsUnicos.forEach(function (id) {
+    var limpio = String(id == null ? '' : id).trim();
+    if (!/^[A-Za-z0-9._-]{1,40}$/.test(limpio)) throw new Error('Id de etiqueta no válido: "' + limpio + '"');
+    if (!vistos[limpio]) { vistos[limpio] = true; ids.push(limpio); }
+  });
+  if (ids.length > MAX_IDS_PREPARACION_) throw new Error('Demasiadas etiquetas de una vez (máximo ' + MAX_IDS_PREPARACION_ + ')');
+  return ids;
+}
+
+function _trozosIdsPreparacion_(ids) {
+  var trozos = [];
+  for (var i = 0; i < ids.length; i += TROZO_IDS_PREPARACION_) trozos.push(ids.slice(i, i + TROZO_IDS_PREPARACION_));
+  return trozos;
+}
+
+function _filtroIdsPreparacion_(trozo) {
+  return 'subtipo=eq.' + encodeURIComponent(SUBTIPO_PREPARACION_PEDIDOS_) +
+    '&id_unico=in.(' + trozo.map(encodeURIComponent).join(',') + ')';
+}
+
+function htmlEtiquetasPreparacionPorIds_(idsUnicos) {
+  var ids = _idsUnicosPreparacion_(idsUnicos);
+  var etiquetas = [];
+  _trozosIdsPreparacion_(ids).forEach(function (trozo) {
+    leerEtiquetas_(_filtroIdsPreparacion_(trozo)).forEach(function (e) { etiquetas.push(e); });
+  });
+  if (etiquetas.length === 0) throw new Error('No hay etiquetas de Preparación de Pedidos con esos ids');
+  // Más antigua primero (FIFO), igual que htmlPendientesPreparacion.
+  etiquetas.sort(function (a, b) { return String(a.fechaCreacion) < String(b.fechaCreacion) ? -1 : (String(a.fechaCreacion) > String(b.fechaCreacion) ? 1 : 0); });
+  var tarjetas = etiquetas.map(function (e) {
+    var fechaTxt = Utilities.formatDate(new Date(e.fechaCreacion), 'GMT+1', 'dd/MM/yyyy');
+    return htmlUnaEtiqueta_(e, fechaTxt);
+  }).join('\n');
+  return envolverEtiquetasHtml_(tarjetas);
+}
+
+function marcarImpresasPreparacionPorIds_(idsUnicos) {
+  var ids = _idsUnicosPreparacion_(idsUnicos);
+  var cantidad = 0;
+  _trozosIdsPreparacion_(ids).forEach(function (trozo) {
+    var actualizadas = supaActualizar_('etiquetas', 'pendiente_impresion_incpc=eq.true&' + _filtroIdsPreparacion_(trozo), { pendiente_impresion_incpc: false });
+    cantidad += actualizadas.length;
+  });
+  return { cantidad: cantidad };
 }
 
 // ── Pestañas de ARRASTRES en Index.html (Meco, Valencia, Torija, Antequera):
