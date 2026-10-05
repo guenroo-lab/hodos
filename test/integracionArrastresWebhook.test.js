@@ -107,6 +107,36 @@ test('borrarEtiquetasArrastre: un origen/soporte inválido llega como error, no 
   assert.match(r.error, /No existe ese soporte/);
 });
 
+test('contarPendientesArrastre: devuelve los contadores de las 4 pestañas de arrastres (una sola consulta ligera)', () => {
+  let consultas = 0;
+  const ctx = cargarConMocks({
+    supaGet_: () => {
+      consultas++;
+      return [
+        { origen: 'MECO' }, { origen: 'MECO' }, { origen: 'MECO' },
+        { origen: 'Valencia' }, { origen: 'Torija' }, { origen: 'Torija' },
+        { origen: 'Taisa', subtipo: 'Devolución' } // no es arrastre: no cuenta en las 4
+      ];
+    }
+  });
+  const r = llamarDoPost(ctx, { accion: 'contarPendientesArrastre', token: 'token-real' });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.cuentas.meco, 3);
+  assert.strictEqual(r.cuentas.valencia, 1);
+  assert.strictEqual(r.cuentas.torija, 2);
+  assert.strictEqual(r.cuentas.antequera, 0);
+  assert.strictEqual(consultas, 1, 'una sola consulta, no una por origen');
+});
+
+test('contarPendientesArrastre: token inválido no consulta nada', () => {
+  const ctx = cargarConMocks({
+    supaGet_: () => { throw new Error('no debería consultarse con token malo'); }
+  });
+  const r = llamarDoPost(ctx, { accion: 'contarPendientesArrastre', token: 'malo' });
+  assert.strictEqual(r.ok, false);
+  assert.match(r.error, /[Tt]oken/);
+});
+
 test('un origen desconocido en cualquiera de las 4 acciones nuevas da error claro', () => {
   const ctx = cargarConMocks({ buscarEtiquetas: () => [] });
   const r = llamarDoPost(ctx, { accion: 'listarPendientesArrastre', token: 'token-real', origen: 'Sevilla' });

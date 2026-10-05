@@ -25,6 +25,12 @@ function doPost(e) {
       respuesta = { ok: true, resultado: marcarImpresasArrastre(datos.origen) };
     } else if (datos.accion === 'borrarEtiquetasArrastre') {
       respuesta = { ok: true, resultado: borrarSoportesAdmin(datos.idsUnicos) };
+    // Insignias numéricas de las pestañas de arrastres de Panel Arrastres
+    // (2026-10-05): los mismos contadores que la barra lateral de HODOS, en una
+    // sola consulta ligera (en vez de 4 listados completos, que releen la tabla
+    // `etiquetas` entera cada uno).
+    } else if (datos.accion === 'contarPendientesArrastre') {
+      respuesta = { ok: true, cuentas: contarEtiquetasPendientesPorPestana() };
     // Imprimir las "Petición Reserva" desde fuera de HODOS (Kairos, pestaña HODOS
     // del jefe, 2026-10-05): la etiqueta sale IGUAL que desde la pestaña "Prep.
     // Pedidos" porque la genera este mismo código (htmlUnaEtiqueta_); solo cambia
