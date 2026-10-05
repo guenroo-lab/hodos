@@ -12,11 +12,20 @@ const path = require('node:path');
 // añadir ReporteCarga.gs encima.
 function contexto(stubs) {
   const ctx = Object.assign({
-    Utilities: { formatDate: function (d) { return d.toISOString().slice(0, 16).replace('T', ' '); } }
+    Utilities: { formatDate: function (d) { return d.toISOString().slice(0, 16).replace('T', ' '); } },
+    // SolicitantesKairos.gs (cruce LDAP/motivo, Kairos) degrada solo a "—" con su
+    // propio try/catch cuando supaGet_ falla — pero ese catch llama a Logger.log,
+    // así que sin este stub el catch en sí revienta con ReferenceError.
+    Logger: { log: function () {} }
   }, stubs);
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'Utilidades.gs'), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'Backend.gs'), 'utf8'), ctx);
+  // supaGet_ no está stubeado (no es lo que testean estos casos): sin él,
+  // _solicitantesPorIdUnico_/_solicitantesPorSscc_ fallan al llamarlo y su propio
+  // catch los degrada a {} — mismo comportamiento que producción cuando Supabase no
+  // responde, no hace falta simularlo aparte.
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'SolicitantesKairos.gs'), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'ReporteCarga.gs'), 'utf8'), ctx);
   return ctx;
 }

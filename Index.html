@@ -18,14 +18,11 @@
       flex-direction:column;
     }
     /* --color-accent-text: variante del acento pensada para texto sobre --bg-primary.
-       En Black Edition, el rojo de marca (#e30613) da 4.05:1 sobre el fondo oscuro —
-       por debajo del mínimo WCAG AA de 4.5:1 para texto normal — así que aquí se usa un
-       rojo ligeramente más claro (#eb3840, 4.87:1) solo para texto; fondos, botones y
-       bordes siguen usando --color-accent tal cual. En Vivid/Gray el acento ya cumple
-       de sobra, así que --color-accent-text es idéntico a --color-accent. */
+       El rojo de marca (#e30613) da 4.05:1 sobre el fondo oscuro — por debajo del
+       mínimo WCAG AA de 4.5:1 para texto normal — así que aquí se usa un rojo
+       ligeramente más claro (#eb3840, 4.87:1) solo para texto; fondos, botones y
+       bordes siguen usando --color-accent tal cual. */
     body.tema-black { --bg-primary:#080a10; --bg-panel:#11141d; --color-accent:#e30613; --color-accent-text:#eb3840; --color-error:#ff6b6b; --text-primary:#fff; --input-bg:#1a1d2e; --input-border:#565d80; }
-    body.tema-vivid { --bg-primary:#fff; --bg-panel:#fbfbfb; --color-accent:#e30000; --color-accent-text:#e30000; --color-error:#c62828; --text-primary:#111; --input-bg:#f5f5f5; --input-border:#8f8f8f; }
-    body.tema-gray  { --bg-primary:#fff; --bg-panel:#fafafa; --color-accent:#555; --color-accent-text:#555; --color-error:#c62828; --text-primary:#111; --input-bg:#f0f0f0; --input-border:#8f8f8f; }
     body { background:var(--bg-panel); color:var(--text-primary); }
 
     button, input, select { font-family:inherit; }
@@ -52,11 +49,6 @@
        se adapta correctamente a cada tema. */
     .app-header .titulo { font-family:'Bebas Neue', sans-serif; font-size:30px; letter-spacing:1px; color:var(--text-primary); line-height:1; }
     .app-header .subtitulo { font-size:11px; color:var(--text-primary); opacity:0.65; letter-spacing:0.5px; }
-    .tema-toggle-btn { width:28px; height:28px; border-radius:50%; border:2px solid rgba(255,255,255,0.35); cursor:pointer; padding:0; transition:transform 0.15s; }
-    .tema-toggle-btn:active { transform:scale(0.88); }
-    .tema-toggle-btn.tema-toggle-black { background:#080a10; }
-    .tema-toggle-btn.tema-toggle-vivid { background:linear-gradient(135deg,#ff0000,#00aa00); }
-    .tema-toggle-btn.tema-toggle-gray  { background:#555; }
 
     /* ── Cuerpo: sidebar + contenido ── */
     .app-body { flex:1; display:flex; min-height:0; }
@@ -307,6 +299,75 @@
     }
 
     .aviso-tienda-invalida { max-width:600px; margin:60px auto; text-align:center; padding:30px; background:var(--bg-primary); border:1px solid var(--input-border); border-radius:10px; }
+
+    /* ══════════════════════════════════════════════════════════════════
+       Tema adicional: "Retro 80s Color-Block" (rompevientos deportivo)
+       ══════════════════════════════════════════════════════════════════
+       Se activa con [data-theme="retro80s"] en <html> — un atributo
+       INDEPENDIENTE de la clase tema-black/vivid/gray de <body> (esa clase
+       la reemplaza por completo cambiarTema(), así que no se puede colgar
+       nada de ahí sin que se borre en el próximo ciclo). No sustituye a los
+       temas existentes: es un cuarto tema seleccionable con su propio botón
+       fijo (#retroThemeBtn), y se puede desactivar para volver exactamente
+       al tema que hubiera antes.
+
+       Restricción de legibilidad: fondos/texto siguen el mismo patrón de
+       alto contraste que ya usa "Black Edition" (superficie casi negra +
+       texto blanco) — tablas de datos, formularios y texto de cuerpo NO
+       llevan colores vivos de fondo, solo la superficie neutra oscura.
+       El acento interactivo (botones, pestaña activa, badge origen) usa el
+       morado/índigo de la paleta en vez de un rosa/amarillo/turquesa
+       saturado, porque comprobado contra blanco (fondo real de esos
+       botones) el índigo da >10:1 de contraste y el resto de la paleta
+       vivida se queda entre 3:1 y 4:1 — insuficiente para texto normal
+       (WCAG AA exige 4.5:1). El rosa neón sí se usa como COLOR DE TEXTO
+       sobre el fondo oscuro (cabeceras de sección, texto de tabla, IDs) —
+       ahí compensa 5.7:1, de sobra. El resto de la paleta (turquesa,
+       amarillo, rojo) se reserva para las bandas decorativas diagonales,
+       donde no hay texto encima. */
+    html[data-theme="retro80s"] body {
+      --bg-primary:#160f2b; --bg-panel:#0b0718; --color-accent:#3B2F85;
+      --color-accent-text:#FF1493; --color-error:#FF4136; --text-primary:#fff;
+      --input-bg:#1e1638; --input-border:#5b4fb0;
+    }
+
+    /* Banda decorativa diagonal (bloques de color con paradas duras, sin
+       degradado difuminado) — puramente ornamental, nunca lleva texto
+       encima, así que no le afecta la restricción de contraste. */
+    .retro-stripe { display:none; height:10px; flex-shrink:0; }
+    html[data-theme="retro80s"] .retro-stripe {
+      display:block;
+      background:linear-gradient(135deg,
+        #FF1493 0%, #FF1493 20%,
+        #00C5B5 20%, #00C5B5 40%,
+        #3B2F85 40%, #3B2F85 60%,
+        #FFD700 60%, #FFD700 80%,
+        #FF2400 80%, #FF2400 100%);
+    }
+
+    /* Botón fijo para alternar el tema Retro 80s. Esquina inferior derecha
+       a propósito: lejos de la cabecera (donde vive el toggle Black/Vivid/
+       Gris), de la barra lateral de pestañas y de los formularios/tablas
+       de escaneo, para no interferir con el uso táctil habitual. */
+    .retro-toggle-btn {
+      position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom, 0px));
+      z-index:500; width:50px; height:50px; border-radius:50%;
+      border:2px solid rgba(255,255,255,0.85); cursor:pointer; padding:0;
+      display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(135deg,
+        #FF1493 0%, #FF1493 20%,
+        #00C5B5 20%, #00C5B5 40%,
+        #3B2F85 40%, #3B2F85 60%,
+        #FFD700 60%, #FFD700 80%,
+        #FF2400 80%, #FF2400 100%);
+      box-shadow:0 4px 14px rgba(0,0,0,0.45);
+      font-family:'Bebas Neue', sans-serif; font-size:13px; letter-spacing:0.5px;
+      color:#fff; text-shadow:0 1px 3px rgba(0,0,0,0.85);
+      transition:transform 0.15s;
+    }
+    .retro-toggle-btn:active { transform:scale(0.9); }
+    .retro-toggle-btn.activo { border-color:#fff; box-shadow:0 4px 18px rgba(255,20,147,0.65); }
+    .retro-toggle-btn:not(.activo) { opacity:0.6; filter:grayscale(0.55); }
   </style>
 </head>
 <body class="tema-black">
@@ -319,8 +380,10 @@
       <div class="subtitulo">Taisa Logistics</div>
     </div>
   </div>
-  <button class="tema-toggle-btn tema-toggle-black" id="temaToggleBtn" title="Cambiar tema (Black → Vivid → Gris)" onclick="cambiarTema()"></button>
 </div>
+<div class="retro-stripe" aria-hidden="true"></div>
+
+<button class="retro-toggle-btn" id="retroThemeBtn" title="Tema Retro 80s Color-Block (adicional, no sustituye al actual)" onclick="toggleRetro()">80s</button>
 
 <div id="avisoTiendaInvalida" class="aviso-tienda-invalida vista-oculta">
   <h2>Enlace no válido</h2>
@@ -384,6 +447,7 @@
         <div class="form-group">
           <label for="origen">Plataforma/Origen</label>
           <select id="origen" onchange="toggleSubtipoTaisa()">
+            <option value="" selected disabled>-- Selecciona --</option>
             <option value="MECO">MECO</option>
             <option value="Valencia">Valencia</option>
             <option value="Torija">Torija</option>
@@ -396,6 +460,7 @@
         <div class="form-group subtipo-taisa" id="subtipoTaisaGroup">
           <label for="subtipoTaisa">Subtipo Taisa</label>
           <select id="subtipoTaisa">
+            <option value="" selected disabled>-- Selecciona --</option>
             <option value="Devolución">Devolución</option>
             <option value="Inventario">Inventario</option>
             <option value="Demarca">Demarca</option>
@@ -411,6 +476,7 @@
         <div class="form-group subtipo-taisa" id="origenTiendaGroup">
           <label for="origenTienda">Tienda origen (cesión)</label>
           <select id="origenTienda">
+            <option value="" selected disabled>-- Selecciona --</option>
             <option value="Málaga">Málaga</option>
             <option value="Marbella">Marbella</option>
             <option value="Mijas">Mijas</option>
@@ -421,6 +487,7 @@
         <div class="form-group">
           <label for="destino">Tienda Destino</label>
           <select id="destino">
+            <option value="" selected disabled>-- Selecciona --</option>
             <option value="Málaga">Málaga</option>
             <option value="Marbella">Marbella</option>
             <option value="Mijas">Mijas</option>
@@ -799,19 +866,25 @@
     document.getElementById('contadorPedidos').textContent = lineas.length + ' pedido' + (lineas.length !== 1 ? 's' : '') + ' detectado' + (lineas.length !== 1 ? 's' : '');
   });
 
-  var TEMAS_ORDEN_ = ['black', 'vivid', 'gray'];
-
-  function aplicarTema_(tema) {
-    document.body.className = 'tema-' + tema;
-    var btn = document.getElementById('temaToggleBtn');
-    btn.className = 'tema-toggle-btn tema-toggle-' + tema;
-    localStorage.setItem('hodosTema', tema);
+  // Tema adicional "Retro 80s Color-Block": independiente del tema base (siempre
+  // Black Edition, único que queda tras quitar Vivid/Gris). Usa un atributo
+  // data-theme en <html>, no una clase de <body>, así queda desacoplado del
+  // fondo/superficie base. Es un interruptor on/off que siempre se puede
+  // apagar para volver exactamente a Black Edition.
+  function aplicarRetro_(activo) {
+    if (activo) {
+      document.documentElement.setAttribute('data-theme', 'retro80s');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    var btn = document.getElementById('retroThemeBtn');
+    if (btn) btn.classList.toggle('activo', activo);
+    localStorage.setItem('hodosTemaRetro', activo ? '1' : '0');
   }
 
-  function cambiarTema() {
-    var actual = TEMAS_ORDEN_.filter(function (t) { return document.body.classList.contains('tema-' + t); })[0] || 'black';
-    var siguiente = TEMAS_ORDEN_[(TEMAS_ORDEN_.indexOf(actual) + 1) % TEMAS_ORDEN_.length];
-    aplicarTema_(siguiente);
+  function toggleRetro() {
+    var activo = document.documentElement.getAttribute('data-theme') === 'retro80s';
+    aplicarRetro_(!activo);
   }
 
   function resumenPorPedido_(items) {
@@ -2097,10 +2170,9 @@
   }
 
   function iniciarVista() {
-    var temaGuardado = localStorage.getItem('hodosTema');
-    if (temaGuardado) {
-      aplicarTema_(temaGuardado);
-    }
+    // Tema base fijo en Black Edition (clase ya está en <body> en el HTML) — solo
+    // queda restaurar el interruptor independiente Retro 80s.
+    aplicarRetro_(localStorage.getItem('hodosTemaRetro') === '1');
 
     if (VISTA === 'operario') {
       document.getElementById('tabBar').classList.add('vista-oculta');
@@ -2128,6 +2200,41 @@
       else { cambiarPestana('carga'); }
     }
   }
+
+  // Intro = pulsar el botón principal del formulario, en cualquier input de una sola
+  // línea. Deliberadamente NO se aplica a textareas multilínea (listaPedidos,
+  // internoNumeroPedido) — ahí Intro es "línea nueva" y machacarlo rompería el pegado
+  // de varios pedidos; esas dos usan Ctrl/Cmd+Intro en su lugar (ver más abajo).
+  function activarIntroComoAccion_(idInput, accion) {
+    var el = document.getElementById(idInput);
+    if (!el) return;
+    el.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      accion();
+    });
+  }
+
+  function activarCtrlIntroComoAccion_(idTextarea, accion) {
+    var el = document.getElementById(idTextarea);
+    if (!el) return;
+    el.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' || !(ev.ctrlKey || ev.metaKey)) return;
+      ev.preventDefault();
+      accion();
+    });
+  }
+
+  ['internoFecha', 'internoIdUnico'].forEach(function (id) {
+    activarIntroComoAccion_(id, function () { buscarYMostrar('interno'); });
+  });
+  activarCtrlIntroComoAccion_('internoNumeroPedido', function () { buscarYMostrar('interno'); });
+
+  ['tiendaFecha', 'tiendaIdUnico', 'tiendaNumeroPedido'].forEach(function (id) {
+    activarIntroComoAccion_(id, function () { buscarYMostrar('tienda'); });
+  });
+
+  activarIntroComoAccion_('camionFecha', crearCargaUI);
 
   iniciarVista();
 
