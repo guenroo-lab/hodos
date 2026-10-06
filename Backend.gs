@@ -212,7 +212,7 @@ function htmlEtiquetaUnica(idUnico) {
   return envolverEtiquetasHtml_(htmlUnaEtiqueta_(e, fechaTxt));
 }
 
-function envolverEtiquetasHtml_(tarjetas) {
+function envolverEtiquetasHtml_(tarjetas, estiloExtra) {
   var estilo = [
     // El driver de la Zebra ignora la orientación pedida por CSS y usa el tamaño
     // NATIVO del rollo para la página (confirmado en real en
@@ -252,7 +252,7 @@ function envolverEtiquetasHtml_(tarjetas) {
   var partes = [];
   partes.push('<' + '!DOCTYPE html>');
   partes.push('<html><head><meta charset="UTF-8">');
-  partes.push('<' + 'style>' + estilo + '<' + '/style>');
+  partes.push('<' + 'style>' + estilo + (estiloExtra || '') + '<' + '/style>');
   partes.push('</head><body>');
   partes.push(tarjetas);
   partes.push('</body></html>');

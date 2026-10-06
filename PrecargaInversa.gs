@@ -181,3 +181,58 @@ function borrarTorreInversa(idUnico) {
 function contarTorresInversaPendientes() {
   return supaGet_('torres_inversa', 'order=id_unico.asc', 'id_unico').length;
 }
+
+// ── Etiqueta Zebra 100x150 de la torre ────────────────────────────────────────────────────
+// Usa el mismo marco de impresión que el resto de etiquetas (envolverEtiquetasHtml_, @page
+// 100x150 con el contenido rotado). Aquí solo se define el interior y su CSS propio.
+
+var ESTILO_ETIQUETA_TORRE_INVERSA_ = [
+  '.inv-lista{display:grid;grid-template-columns:1fr;gap:1mm 6mm;align-content:center;padding:0 4mm;}',
+  '.inv-lista.inv-dos-col{grid-template-columns:1fr 1fr;}',
+  '.inv-linea{display:flex;align-items:baseline;gap:3mm;font-weight:800;}',
+  '.inv-cant{min-width:12mm;text-align:right;font-size:1.25em;}',
+  '.inv-nom{text-transform:uppercase;}',
+  '.inv-g{font-size:24px;}.inv-m{font-size:19px;}.inv-p{font-size:15px;}.inv-xp{font-size:12px;}',
+  '.inv-total{font-size:20px;font-weight:900;text-align:center;border-top:2px solid #000;padding-top:1mm;}'
+].join('');
+
+// Cuantas más líneas, más pequeña la letra; a partir de 7 se reparten en dos columnas.
+function claseTamanoLineasInversa_(n) {
+  if (n <= 4) return 'inv-g';
+  if (n <= 6) return 'inv-m';
+  if (n <= 9) return 'inv-p';
+  return 'inv-xp';
+}
+
+function htmlUnaTorreInversa_(torre, fechaTxt) {
+  var n = torre.lineas.length;
+  var barcodeSvg = code128SVG(String(torre.idUnico), { anchoModulo: 2, alto: 60 });
+  var lineasHtml = torre.lineas.map(function (l) {
+    return '<div class="inv-linea"><span class="inv-cant">' + esc_(l.cantidad) + '</span><span class="inv-nom">' + esc_(l.nombre) + '</span></div>';
+  }).join('');
+  var clases = 'inv-lista ' + claseTamanoLineasInversa_(n) + (n > 6 ? ' inv-dos-col' : '');
+  return '' +
+    '<div class="etiqueta-wrapper"><div class="etiqueta">' +
+    '<div class="etiqueta-top">' +
+    '<img src="data:image/png;base64,' + LOGO_TAISA_B64 + '" class="logo-taisa">' +
+    '<div class="fecha-id">Creada: ' + esc_(fechaTxt) + '<div class="id-unico">' + esc_(torre.idUnico) + '</div></div>' +
+    '</div>' +
+    '<div class="tienda-destino">INVERSA · TORIJA</div>' +
+    '<div class="' + clases + '">' + lineasHtml + '</div>' +
+    '<div class="inv-total">TOTAL: ' + esc_(torre.total) + (Number(torre.total) === 1 ? ' SOPORTE' : ' SOPORTES') + '</div>' +
+    '<div class="etiqueta-bottom"><div class="barcode-wrap">' + barcodeSvg + '</div></div>' +
+    '</div></div>';
+}
+
+function htmlEtiquetasTorresInversa(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) throw new Error('Faltan las torres a imprimir');
+  var limpios = ids.map(validarIdTorreInversa_);
+  var filas = supaGet_('torres_inversa', 'id_unico=in.(' + limpios.map(encodeURIComponent).join(',') + ')&order=id_unico.asc');
+  if (filas.length === 0) throw new Error('Esas torres ya no existen (puede que ya se hayan cargado en un camión)');
+  var tarjetas = filas.map(function (f) {
+    var torre = torreDesdeSupabase_(f);
+    var fechaTxt = Utilities.formatDate(new Date(torre.fechaCreacion), 'GMT+1', 'dd/MM/yyyy');
+    return htmlUnaTorreInversa_(torre, fechaTxt);
+  }).join('\n');
+  return envolverEtiquetasHtml_(tarjetas, ESTILO_ETIQUETA_TORRE_INVERSA_);
+}
