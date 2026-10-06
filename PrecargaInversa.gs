@@ -86,3 +86,98 @@ function fechaIsoONulo_(valor) {
   var d = new Date(valor);
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
+
+// ── Catálogo de soportes (el mismo documento que usa Plataforma) ──────────────────────────
+
+var CATALOGO_INVERSA_SHEET_ID_ = '1alOYhM53CHfu8elir0zttHwYFY8o5CLeRHDqaYwjRQY';
+var CATALOGO_INVERSA_PESTANA_ = 'CATALOGO_SOPORTES';
+var CATALOGO_INVERSA_CACHE_CLAVE_ = 'catalogo_inversa_v1';
+var CATALOGO_INVERSA_CACHE_SEGUNDOS_ = 21600; // 6 h, el máximo de CacheService
+
+// Capa fina sobre SpreadsheetApp (los tests la sustituyen).
+function leerFilasCatalogoInversa_() {
+  var hoja = SpreadsheetApp.openById(CATALOGO_INVERSA_SHEET_ID_).getSheetByName(CATALOGO_INVERSA_PESTANA_);
+  if (!hoja) throw new Error('No se encontró la pestaña ' + CATALOGO_INVERSA_PESTANA_ + ' en el documento de soportes de Plataforma');
+  return hoja.getDataRange().getDisplayValues();
+}
+
+function obtenerCatalogoInversa() {
+  var cache = CacheService.getScriptCache();
+  try {
+    var guardado = cache.get(CATALOGO_INVERSA_CACHE_CLAVE_);
+    if (guardado) return JSON.parse(guardado);
+  } catch (e) {
+    // Una caché ilegible no debe impedir leer la hoja.
+  }
+  var catalogo = parsearCatalogoSoportes_(leerFilasCatalogoInversa_());
+  if (catalogo.length === 0) throw new Error('El catálogo de soportes está vacío o no se pudo leer');
+  try {
+    cache.put(CATALOGO_INVERSA_CACHE_CLAVE_, JSON.stringify(catalogo), CATALOGO_INVERSA_CACHE_SEGUNDOS_);
+  } catch (e2) {
+    // Sin caché solo se pierde velocidad.
+  }
+  return catalogo;
+}
+
+// Para forzar la relectura si el equipo de Plataforma añade un tipo nuevo (se ejecuta a mano
+// desde el editor; si no, el catálogo nuevo llega solo en un máximo de 6 horas).
+function limpiarCacheCatalogoInversa() {
+  CacheService.getScriptCache().remove(CATALOGO_INVERSA_CACHE_CLAVE_);
+}
+
+// ── Datos de torres (tabla public.torres_inversa) ─────────────────────────────────────────
+// Una fila existe SOLO mientras la torre está pendiente: cargarla es borrarla.
+
+function torreDesdeSupabase_(f) {
+  return {
+    idUnico: f.id_unico,
+    lineas: f.lineas,
+    total: f.total_soportes,
+    creadoPor: f.creado_por,
+    fechaCreacion: f.fecha_creacion
+  };
+}
+
+function crearTorreInversa(lineas) {
+  var limpias = normalizarLineasTorre_(lineas, obtenerCatalogoInversa());
+  var idUnico = supaRpc_('siguiente_id_torre_inversa', {});
+  var creadoPor = Session.getActiveUser().getEmail() || 'desconocido';
+  var filas = supaInsertar_('torres_inversa', [{
+    id_unico: idUnico,
+    lineas: limpias,
+    total_soportes: totalSoportesTorre_(limpias),
+    creado_por: creadoPor
+  }]);
+  if (filas.length === 0) throw new Error('crearTorreInversa: Supabase no devolvió la torre insertada');
+  return torreDesdeSupabase_(filas[0]);
+}
+
+function listarTorresInversa() {
+  var filas = supaGet_('torres_inversa', 'order=fecha_creacion.asc,id_unico.asc');
+  var torres = filas.map(torreDesdeSupabase_);
+  return { torres: torres, resumen: resumenPorTipoTorres_(torres) };
+}
+
+function actualizarTorreInversa(idUnico, lineas) {
+  var id = validarIdTorreInversa_(idUnico);
+  var limpias = normalizarLineasTorre_(lineas, obtenerCatalogoInversa());
+  var filas = supaActualizar_('torres_inversa', 'id_unico=eq.' + encodeURIComponent(id), {
+    lineas: limpias,
+    total_soportes: totalSoportesTorre_(limpias)
+  });
+  if (filas.length === 0) throw new Error('Esa torre ya no existe (puede que ya se haya cargado en un camión)');
+  return torreDesdeSupabase_(filas[0]);
+}
+
+function borrarTorreInversa(idUnico) {
+  var id = validarIdTorreInversa_(idUnico);
+  var borradas = supaBorrar_('torres_inversa', 'id_unico=eq.' + encodeURIComponent(id));
+  if (borradas.length === 0) throw new Error('Esa torre ya no existe (puede que ya se haya cargado en un camión)');
+  return { ok: true };
+}
+
+// Para la insignia de la barra lateral: solo la columna id_unico (el egress de Supabase
+// importa: el proyecto está en plan Free).
+function contarTorresInversaPendientes() {
+  return supaGet_('torres_inversa', 'order=id_unico.asc', 'id_unico').length;
+}
