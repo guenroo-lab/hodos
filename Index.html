@@ -141,13 +141,25 @@
 
     @media (max-width:860px) {
       .app-body { flex-direction:column; }
+      /* Con diez pestañas no caben en el ancho de un móvil (sumaban ~1050 px y arrastraban la página
+         entera de lado). La barra se desliza de lado dentro de sí misma, en una sola fila, y a cada
+         lado aparece una sombra mientras haya más pestañas por ver. */
       .app-sidebar {
         width:100%; flex-direction:row; border-right:none; border-bottom:2px solid var(--color-accent);
         padding:8px 12px; gap:6px;
+        overflow-x:auto; overflow-y:hidden; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch;
+        scroll-snap-type:x proximity; scroll-padding:0 12px; scrollbar-width:none;
+        background:
+          linear-gradient(to right, var(--bg-primary) 30%, transparent) left center / 36px 100% no-repeat local,
+          linear-gradient(to left, var(--bg-primary) 30%, transparent) right center / 36px 100% no-repeat local,
+          radial-gradient(farthest-side at 0 50%, rgba(0,0,0,0.28), transparent) left center / 12px 100% no-repeat scroll,
+          radial-gradient(farthest-side at 100% 50%, rgba(0,0,0,0.28), transparent) right center / 12px 100% no-repeat scroll,
+          var(--bg-primary);
       }
-      .app-sidebar button { flex:1; justify-content:center; padding:10px 6px; font-size:12.5px; }
+      .app-sidebar::-webkit-scrollbar { display:none; }
+      .app-sidebar button { flex:0 0 auto; white-space:nowrap; justify-content:center; gap:8px; padding:10px 14px; font-size:13px; scroll-snap-align:start; }
       .sidebar-rotulo { display:none; }
-      .app-sidebar button.sub { padding-left:6px; }
+      .app-sidebar button.sub { padding-left:14px; }
       /* En fila, la insignia flota en la esquina del botón en vez de empujar el texto. */
       .app-sidebar button { position:relative; }
       .app-sidebar button .tab-badge { position:absolute; top:2px; right:2px; margin:0; min-width:18px; padding:1px 5px; font-size:10.5px; }
@@ -171,13 +183,21 @@
     .inversa-chip strong { color:var(--color-accent-text); }
     .inversa-desglose { font-size:13px; }
     .inversa-acciones { display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap; }
+    /* En una pantalla estrecha no caben en una línea la foto, el nombre y los botones de cantidad
+       (el nombre quedaba aplastado): la fila se apila, foto+nombre arriba y la cantidad debajo. */
+    @media (max-width:520px) {
+      .inversa-fila { flex-wrap:wrap; }
+      .inversa-ficha { flex:1 1 100%; }
+      .inversa-cantidad { margin-left:auto; }
+    }
     .vista-oculta { display:none !important; }
 
     /* ── Formularios y tarjetas ── */
     .container { max-width:1600px; margin:0 auto; display:grid; grid-template-columns:1fr 1.3fr; gap:28px; }
     @media (max-width:1200px) { .container { grid-template-columns:1fr; } }
 
-    .pendientes-grid { max-width:1600px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:24px; }
+    /* min(380px, 100%): en un móvil más estrecho que 380 px la tarjeta se ajusta al ancho en vez de desbordar. */
+    .pendientes-grid { max-width:1600px; margin:0 auto; display:grid; grid-template-columns:repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap:24px; }
     .pendientes-contador { font-size:12px; font-weight:600; opacity:0.75; text-transform:none; letter-spacing:0; margin-left:8px; }
     .pendientes-alerta-badge { background:var(--color-error); color:#fff; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; white-space:nowrap; }
     /* La tabla puede tener más columnas de las que caben en una tarjeta estrecha (p.ej.
@@ -366,11 +386,19 @@
     .btn-quitar-fila:hover, .btn-quitar-fila:active { background:var(--bg-panel); }
 
     @media (max-width:700px) {
+      /* "Soporte No documentado cargado" en una sola línea no cabe en una tarjeta de móvil estrecho. */
+      .badge-razon-flujo { white-space:normal; max-width:100%; }
       .resultados-tabla thead { display:none; }
       .resultados-tabla, .resultados-tabla tbody, .resultados-tabla tr, .resultados-tabla td { display:block; width:100%; }
-      .resultados-tabla tr { margin:12px; border:1px solid var(--input-border); border-radius:8px; padding:4px 12px; }
-      .resultados-tabla td { border:none; padding:8px 0; display:flex; justify-content:space-between; gap:12px; }
+      /* margin:12px 0 (no 12px): con margen lateral y width:100% la tarjeta se salía 12 px por la derecha y
+         el contenedor le cortaba el borde y el final de los valores (p.ej. la antigüedad en Pendientes). */
+      .resultados-tabla tr { margin:12px 0; border:1px solid var(--input-border); border-radius:8px; padding:4px 12px; }
+      .resultados-tabla td { border:none; padding:8px 0; display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; }
       .resultados-tabla td::before { content:attr(data-label); font-weight:600; color:var(--color-accent-text); font-size:11px; text-transform:uppercase; }
+      /* En Pendientes el ID único va bajo el pedido y la tabla tenía un ancho mínimo de 340 px: en un móvil
+         la tarjeta de la tienda es más estrecha y se recortaban los valores de la derecha. */
+      .pendientes-tabla-wrap .resultados-tabla { min-width:0; }
+      .resultados-tabla td .pendientes-id-unico { flex:1 0 100%; text-align:right; }
 
       /* "Cargar camión" (Paso 1) en móvil: los botones de tienda y el bloque
          fecha/horario/botón dejaban de aprovechar el ancho de pantalla porque
@@ -380,6 +408,8 @@
       .tienda-selector { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
       .tienda-btn { justify-content:center; padding:16px 10px; }
       .busqueda-form { grid-template-columns:1fr; padding:18px; }
+      /* Los botones de las pestañas de arrastres llevan margin-left inline para ir en fila; apilados quedaban desalineados. */
+      .busqueda-form button { margin-left:0 !important; }
       .fecha-chips .fecha-chip { flex:1 1 calc(33.333% - 6px); text-align:center; }
     }
 
@@ -2657,6 +2687,12 @@
     document.getElementById('vistaAntequera').classList.toggle('vista-oculta', nombre !== 'antequera');
     document.getElementById('vistaInversa').classList.toggle('vista-oculta', nombre !== 'inversa');
     document.querySelectorAll('#tabBar button').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === nombre); });
+    // En móvil la barra de pestañas se desliza de lado: se deja a la vista la pestaña elegida.
+    var btnActivo = document.querySelector('#tabBar button.active');
+    if (btnActivo && btnActivo.scrollIntoView && window.matchMedia('(max-width:860px)').matches) {
+      var sinAnimar = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      btnActivo.scrollIntoView({ block: 'nearest', inline: 'center', behavior: sinAnimar ? 'auto' : 'smooth' });
+    }
     if (nombre === 'interno') { buscarYMostrar('interno'); }
     if (nombre === 'carga') { cargarHistorial(); }
     if (nombre === 'pendientes') { cargarPendientes_(); }
