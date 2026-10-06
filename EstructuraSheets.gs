@@ -46,8 +46,11 @@ function filaEtiquetaHaciaSupabase_(obj) {
   return fila;
 }
 
-function leerEtiquetas_(filtroPostgrest) {
-  return supaGet_('etiquetas', filtroPostgrest).map(filaEtiquetaDesdeSupabase_);
+// `columnas` (opcional, 2026-10-06): lista PostgREST de columnas reales ('lote_id,destino') --
+// el resultado sigue mapeado a camelCase pero solo con esos campos rellenos (el resto
+// queda undefined). Para lecturas que solo usan unos pocos campos de una tabla grande.
+function leerEtiquetas_(filtroPostgrest, columnas) {
+  return supaGet_('etiquetas', filtroPostgrest, columnas).map(filaEtiquetaDesdeSupabase_);
 }
 
 function insertarEtiquetas_(filasEtiquetas) {

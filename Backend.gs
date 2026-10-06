@@ -95,8 +95,7 @@ function guardarContenidoSoporte(idUnico, items, creadoPorOverride) {
   return { idUnico: idUnico, cantidad: lineas.length };
 }
 
-function obtenerMapaContenido_() {
-  var filas = leerTodoContenidoCrudo_();
+function agruparContenidoPorIdUnico_(filas) {
   var mapa = {};
   filas.forEach(function (f) {
     if (!mapa[f.id_unico]) mapa[f.id_unico] = [];
@@ -105,9 +104,47 @@ function obtenerMapaContenido_() {
   return mapa;
 }
 
+function obtenerMapaContenido_() {
+  return agruparContenidoPorIdUnico_(leerTodoContenidoCrudo_());
+}
+
+// ── Fase 2 del recorte de egress (2026-10-06) ──
+// Medido el 06/10 en los logs de Supabase: buscarEtiquetas, obtenerCarga y cerrarCarga
+// bajaban la tabla `etiquetas` ENTERA (~6.200 filas, 7 viajes), `contenido` entera
+// (~2.000) y `cargas` entera en cada llamada para quedarse con unas pocas filas:
+// ~850.000 filas de etiquetas al día, ~75 % de lo que sale de Supabase hacia HODOS.
+// Ahora cada una pide solo lo que usa. Los mapas se construyen SOLO para las etiquetas
+// que superan el filtro; si fueran muchísimas (búsqueda sin criterios) se vuelve a la
+// lectura entera de antes, que en ese caso cuesta menos viajes que cientos de lotes.
+var MAX_IDS_MAPA_CONTENIDO_ = 400;
+var MAX_IDS_MAPA_CARGAS_ = 80;
+var LOTE_IDS_CARGAS_ = 40;
+
+function obtenerMapaContenidoDe_(idsUnico) {
+  var ids = distintosTexto_(idsUnico);
+  if (ids.length === 0) return {};
+  if (ids.length > MAX_IDS_MAPA_CONTENIDO_) return obtenerMapaContenido_();
+  return agruparContenidoPorIdUnico_(leerContenidoCrudoPorIds_(ids));
+}
+
+function obtenerMapaCargasDe_(idsCarga) {
+  var ids = distintosTexto_(idsCarga);
+  if (ids.length === 0) return {};
+  if (ids.length > MAX_IDS_MAPA_CARGAS_) return obtenerMapaCargas_();
+  var mapa = {};
+  for (var i = 0; i < ids.length; i += LOTE_IDS_CARGAS_) {
+    var trozo = ids.slice(i, i + LOTE_IDS_CARGAS_);
+    leerCargas_('id_carga=in.(' + trozo.map(function (id) { return encodeURIComponent(id); }).join(',') + ')').forEach(function (f) {
+      mapa[f.idCarga] = { fechaEntrega: fechaComoTexto(f.fechaEntrega), horario: f.horario };
+    });
+  }
+  return mapa;
+}
+
 function obtenerHistorialLotes(limite) {
   limite = limite || 10;
-  var filas = leerEtiquetas_('order=fecha_creacion.asc');
+  // Solo las 4 columnas que usa el cálculo de abajo (el resto de la etiqueta no se descarga).
+  var filas = leerEtiquetas_('order=fecha_creacion.asc', 'lote_id,origen_texto,destino,fecha_creacion');
   var porLote = {};
   var orden = [];
   filas.forEach(function (f) {
@@ -270,6 +307,40 @@ function obtenerMapaCargas_() {
   return mapa;
 }
 
+// Pre-filtro PostgREST de buscarEtiquetas (Fase 2 del recorte de egress, 2026-10-06).
+// SOBRE-APROXIMA a propósito: nunca deja fuera una fila que el filtro JS de
+// buscarEtiquetas aceptaría (ilike es insensible a mayúsculas e indexOf no; la fecha
+// lleva un día de margen por cada lado). El filtro JS sigue decidiendo de verdad. Un
+// criterio con caracteres que podrían romper un `ilike`/`or(...)` (comodines, comas,
+// paréntesis, barras) NO se empuja al servidor: esa búsqueda lee más, pero nunca mal.
+function filtroPrevioBuscarEtiquetas_(filtros) {
+  var partes = [];
+  var SEGURO_ID = /^[A-Za-z0-9 _.+\-]+$/;
+  var SEGURO_PEDIDO = /^[A-Za-z0-9+\-]+$/;
+  if (filtros.destino) partes.push('destino=eq.' + encodeURIComponent(filtros.destino));
+  if (filtros.origen) partes.push('origen=eq.' + encodeURIComponent(filtros.origen));
+  if (filtros.estado) partes.push('estado=eq.' + encodeURIComponent(filtros.estado));
+  if (filtros.idUnico && SEGURO_ID.test(String(filtros.idUnico))) {
+    partes.push('id_unico=ilike.' + encodeURIComponent('*' + String(filtros.idUnico) + '*'));
+  }
+  if (filtros.numeroPedido) {
+    var tokens = parsearLotePedidos(filtros.numeroPedido);
+    if (tokens.length >= 1 && tokens.length <= 20 && tokens.every(function (t) { return SEGURO_PEDIDO.test(t); })) {
+      var condiciones = tokens.map(function (t) { return 'numero_pedido.ilike.' + encodeURIComponent('*' + t + '*'); });
+      partes.push(condiciones.length === 1 ? 'numero_pedido=ilike.' + encodeURIComponent('*' + tokens[0] + '*') : 'or=(' + condiciones.join(',') + ')');
+    }
+  }
+  if (filtros.pendienteImpresionIncpc === true) partes.push('pendiente_impresion_incpc=eq.true');
+  if (filtros.fecha && /^\d{4}-\d{2}-\d{2}$/.test(String(filtros.fecha))) {
+    var p = String(filtros.fecha).split('-');
+    var dia = Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    var DIA_MS = 24 * 3600 * 1000;
+    partes.push('fecha_creacion=gte.' + encodeURIComponent(new Date(dia - DIA_MS).toISOString()));
+    partes.push('fecha_creacion=lt.' + encodeURIComponent(new Date(dia + DIA_MS).toISOString()));
+  }
+  return partes.join('&');
+}
+
 function buscarEtiquetas(filtros) {
   filtros = filtros || {};
   // order=id_unico.asc (no null): un id_unico correlativo por secuencia da un orden
@@ -277,11 +348,12 @@ function buscarEtiquetas(filtros) {
   // "Borrar seleccionados" en el propio Buscador Interno) mientras se pagina la tabla
   // completa puede desplazar filas y saltarse una entre dos peticiones (ver v48/v49 en
   // CLAUDE.md y SupabaseCliente.gs).
-  var filas = leerEtiquetas_('order=id_unico.asc');
-  var mapaCargas = obtenerMapaCargas_();
-  var mapaContenido = obtenerMapaContenido_();
+  // Fase 2 (2026-10-06): con criterios, solo se piden las filas que podrían cumplirlos
+  // (filtroPrevioBuscarEtiquetas_); y las cargas/contenido, solo de las que salen.
+  var filtroServidor = filtroPrevioBuscarEtiquetas_(filtros);
+  var filas = leerEtiquetas_('order=id_unico.asc' + (filtroServidor ? '&' + filtroServidor : ''));
 
-  var resultado = filas.filter(function (f) {
+  var pasan = filas.filter(function (f) {
     if (filtros.destino && f.destino !== filtros.destino) return false;
     if (filtros.origen && f.origen !== filtros.origen) return false;
     if (filtros.estado && f.estado !== filtros.estado) return false;
@@ -297,7 +369,12 @@ function buscarEtiquetas(filtros) {
       if (fechaFila !== filtros.fecha) return false;
     }
     return true;
-  }).map(function (f) {
+  });
+
+  var mapaCargas = obtenerMapaCargasDe_(pasan.map(function (f) { return f.bateaId; }));
+  var mapaContenido = obtenerMapaContenidoDe_(pasan.map(function (f) { return f.idUnico; }));
+
+  var resultado = pasan.map(function (f) {
     var carga = f.bateaId ? mapaCargas[f.bateaId] : null;
     return {
       idUnico: f.idUnico, numeroPedido: f.numeroPedido, soporteNum: f.soporteNum, soporteTotal: f.soporteTotal,
@@ -430,7 +507,8 @@ function agruparSoportesAdmin(idsUnicos) {
     actualizarEtiquetaCondicional_(idNuevo, { pendienteImpresionIncpc: true });
   }
 
-  var mapaContenido = obtenerMapaContenido_();
+  // Fase 2 (2026-10-06): el contenido solo de los soportes que se agrupan, no de toda la tabla.
+  var mapaContenido = obtenerMapaContenidoDe_(filas.map(function (f) { return f.idUnico; }));
   var contenidoCombinado = [];
   filas.forEach(function (f) {
     (mapaContenido[f.idUnico] || []).forEach(function (item) { contenidoCombinado.push(item); });
@@ -587,8 +665,10 @@ function obtenerCarga(idCarga) {
   if (cargas.length === 0) throw new Error('Carga no encontrada: ' + idCarga);
   var filaCarga = cargas[0];
 
-  var mapaContenidoCarga = obtenerMapaContenido_();
-  var escaneados = leerEtiquetas_('batea_id=eq.' + encodeURIComponent(idCarga))
+  // Fase 2 (2026-10-06): el contenido solo de las etiquetas de ESTA carga, no de toda la tabla.
+  var filasEscaneadas = leerEtiquetas_('batea_id=eq.' + encodeURIComponent(idCarga));
+  var mapaContenidoCarga = obtenerMapaContenidoDe_(filasEscaneadas.map(function (f) { return f.idUnico; }));
+  var escaneados = filasEscaneadas
     .map(function (f) {
       return {
         idUnico: f.idUnico, numeroPedido: f.numeroPedido, origenTexto: f.origenTexto,
@@ -723,6 +803,26 @@ function quitarSoporteDeCarga(idCarga, idUnico) {
   return { ok: true };
 }
 
+// Las filas que de verdad miran pedidosPendientesEnCarga y soportesMecoPendientesEnCarga
+// (Utilidades.gs): (a) las etiquetas cargadas en ESTA carga (bateaId === idCarga) y (b)
+// las que siguen REGISTRADO (aún sin cargar). Cualquier otra fila (ya EN_RUTA en otra
+// carga, de otro estado) no entra en ninguna de las dos cuentas, así que el resultado
+// es EXACTAMENTE el mismo que con la tabla entera. Solo las 9 columnas que usa el cierre,
+// sin duplicados y en el mismo orden (id_unico asc) que la lectura entera de antes.
+function leerEtiquetasParaChequeoCierre_(idCarga) {
+  var COLUMNAS = 'id_unico,numero_pedido,origen,origen_texto,destino,estado,batea_id,soporte_total,lote_id';
+  var enCarga = leerEtiquetas_('batea_id=eq.' + encodeURIComponent(idCarga) + '&order=id_unico.asc', COLUMNAS);
+  var registradas = leerEtiquetas_('estado=eq.REGISTRADO&order=id_unico.asc', COLUMNAS);
+  var vistos = {};
+  var todas = [];
+  enCarga.concat(registradas).forEach(function (f) {
+    var k = String(f.idUnico);
+    if (!vistos[k]) { vistos[k] = true; todas.push(f); }
+  });
+  todas.sort(function (a, b) { return String(a.idUnico) < String(b.idUnico) ? -1 : (String(a.idUnico) > String(b.idUnico) ? 1 : 0); });
+  return todas;
+}
+
 function cerrarCarga(idCarga, forzar) {
   var cargas = leerCargas_('id_carga=eq.' + encodeURIComponent(idCarga));
   if (cargas.length === 0) throw new Error('Carga no encontrada: ' + idCarga);
@@ -730,7 +830,10 @@ function cerrarCarga(idCarga, forzar) {
 
   // order=id_unico.asc: ver nota igual en buscarEtiquetas — orden estable entre
   // páginas frente a un borrado concurrente mientras se pagina la tabla completa.
-  var filasChk = leerEtiquetas_('order=id_unico.asc').map(function (f) {
+  // Fase 2 (2026-10-06): ya no se baja la tabla entera (~6.200 filas) en cada cierre:
+  // las dos comprobaciones de abajo solo miran las etiquetas de ESTA carga y las que
+  // siguen REGISTRADO (ver leerEtiquetasParaChequeoCierre_).
+  var filasChk = leerEtiquetasParaChequeoCierre_(idCarga).map(function (f) {
     return {
       idUnico: f.idUnico, numeroPedido: f.numeroPedido, origen: f.origen, origenTexto: f.origenTexto,
       destino: f.destino, estado: f.estado, bateaId: f.bateaId,

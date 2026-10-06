@@ -86,7 +86,8 @@ test('buscarEtiquetas: incluye razonFlujo en el resultado', () => {
   const ctx = contextoBackend({
     leerEtiquetas_: () => [filaBase({ razonFlujo: 'Soporte No documentado cargado', fechaCreacion: new Date().toISOString() })],
     leerCargas_: () => [],
-    leerTodoContenidoCrudo_: () => []
+    leerTodoContenidoCrudo_: () => [],
+    leerContenidoCrudoPorIds_: () => []
   });
   const r = ctx.buscarEtiquetas({});
   assert.strictEqual(r[0].razonFlujo, 'Soporte No documentado cargado');
@@ -100,7 +101,8 @@ test('buscarEtiquetas: numeroPedido admite búsqueda masiva (varios pedidos, uno
       filaBase({ idUnico: 'HODOS-C', numeroPedido: '333333', destino: 'Marbella', fechaCreacion: new Date().toISOString() })
     ],
     leerCargas_: () => [],
-    leerTodoContenidoCrudo_: () => []
+    leerTodoContenidoCrudo_: () => [],
+    leerContenidoCrudoPorIds_: () => []
   });
   const r = ctx.buscarEtiquetas({ numeroPedido: '111111\n333333\n999999' });
   const ids = r.map((x) => x.idUnico).sort();
@@ -114,7 +116,8 @@ test('buscarEtiquetas: numeroPedido masivo combinado con destino filtra solo esa
       filaBase({ idUnico: 'HODOS-C', numeroPedido: '111111', destino: 'Marbella', fechaCreacion: new Date().toISOString() })
     ],
     leerCargas_: () => [],
-    leerTodoContenidoCrudo_: () => []
+    leerTodoContenidoCrudo_: () => [],
+    leerContenidoCrudoPorIds_: () => []
   });
   const r = ctx.buscarEtiquetas({ numeroPedido: '111111', destino: 'Málaga' });
   assert.strictEqual(r.length, 1);
@@ -127,7 +130,8 @@ test('buscarEtiquetas: numeroPedido de un solo valor sigue haciendo match por su
       filaBase({ idUnico: 'HODOS-D', numeroPedido: '100200+100300', destino: 'Málaga', fechaCreacion: new Date().toISOString() })
     ],
     leerCargas_: () => [],
-    leerTodoContenidoCrudo_: () => []
+    leerTodoContenidoCrudo_: () => [],
+    leerContenidoCrudoPorIds_: () => []
   });
   const r = ctx.buscarEtiquetas({ numeroPedido: '100300' });
   assert.strictEqual(r.length, 1);
@@ -495,6 +499,7 @@ function contextoAgrupacion(filas, stubsExtra) {
     leerEtiquetas_: () => filas,
     insertarEtiquetas_: (fs) => fs,
     leerTodoContenidoCrudo_: () => [],
+    leerContenidoCrudoPorIds_: () => [],
     guardarContenidoSoporte: () => ({ idUnico: 'x', cantidad: 0 })
   }, stubsExtra));
 }
@@ -576,6 +581,7 @@ test('cerrarCarga: reclama el cierre (PATCH condicionado a ABIERTA) ANTES de gen
     leerCargas_: () => [{ idCarga: 'CARGA-1', estado: 'ABIERTA', destino: 'Málaga', fechaEntrega: '2026-09-25T00:00:00.000Z', horario: '10:00' }],
     leerEtiquetas_: () => [],
     leerTodoContenidoCrudo_: () => [],
+    leerContenidoCrudoPorIds_: () => [],
     actualizarCargaCondicional_: (idCarga, cambios, filtroExtra) => {
       ctx._orden.push('claim');
       assert.match(filtroExtra, /estado=eq\.ABIERTA/);
@@ -605,6 +611,7 @@ test('cerrarCarga: un fallo en el cotejo SIE se devuelve como aviso al cliente, 
     leerCargas_: () => [{ idCarga: 'CARGA-3', estado: 'ABIERTA', destino: 'Marbella', fechaEntrega: '2026-09-25T00:00:00.000Z', horario: '16:00' }],
     leerEtiquetas_: () => [],
     leerTodoContenidoCrudo_: () => [],
+    leerContenidoCrudoPorIds_: () => [],
     actualizarCargaCondicional_: () => ({ idCarga: 'CARGA-3', estado: 'CERRADA' }),
     actualizarCarga_: () => ({}),
     cotejarPaletesDeCarga_: () => ({ ok: false, error: 'Drive SIE no responde' })
@@ -621,7 +628,8 @@ test('buscarEtiquetas: devuelve expedicion y creadoPor (Panel Arrastres agrupa s
       filaBase({ expedicion: null, creadoPor: null, fechaCreacion: new Date().toISOString() })
     ],
     leerCargas_: () => [],
-    leerTodoContenidoCrudo_: () => []
+    leerTodoContenidoCrudo_: () => [],
+    leerContenidoCrudoPorIds_: () => []
   });
   const r = ctx.buscarEtiquetas({});
   assert.strictEqual(r[0].expedicion, '73142');

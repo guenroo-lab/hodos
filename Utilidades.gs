@@ -8,6 +8,19 @@ function parsearLotePedidos(textoPegado) {
     .filter(function (linea) { return linea.length > 0; });
 }
 
+// Valores únicos (como texto) de una lista, sin vacíos/null/undefined — para armar listas
+// `in.(...)` de ids sin repetir (Fase 2 del recorte de egress, 2026-10-06).
+function distintosTexto_(valores) {
+  var vistos = {};
+  var out = [];
+  (valores || []).forEach(function (v) {
+    if (v === null || v === undefined || v === '') return;
+    var k = String(v);
+    if (!vistos[k]) { vistos[k] = true; out.push(k); }
+  });
+  return out;
+}
+
 function formatearOrigenTexto(origen, detalle) {
   // "detalle" es el subtipo cuando origen es Taisa, o la tienda de origen cuando
   // origen es Cesión (transferencia entre tiendas del circuito) — mismo parámetro,

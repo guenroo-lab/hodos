@@ -17,6 +17,29 @@ function leerTodoContenidoCrudo_() {
   return supaGet_('contenido', null);
 }
 
+// Fase 2 del recorte de egress (2026-10-06): el contenido de UNAS etiquetas concretas
+// (id_unico=in.(...)) en vez de la tabla entera (~2.000 filas, varias páginas) cada vez
+// que se busca o se abre una carga. Misma forma que leerTodoContenidoCrudo_ (filas
+// crudas, snake_case, con id_unico). Se pide en lotes de LOTE_IDS_CONTENIDO_ ids para
+// que cada URL quede muy por debajo del límite de UrlFetchApp (~2 KB).
+var LOTE_IDS_CONTENIDO_ = 60;
+
+function leerContenidoCrudoPorIds_(idsUnico) {
+  var vistos = {};
+  var ids = [];
+  (idsUnico || []).forEach(function (id) {
+    var k = String(id);
+    if (!vistos[k]) { vistos[k] = true; ids.push(k); }
+  });
+  var filas = [];
+  for (var i = 0; i < ids.length; i += LOTE_IDS_CONTENIDO_) {
+    var trozo = ids.slice(i, i + LOTE_IDS_CONTENIDO_);
+    supaGet_('contenido', 'id_unico=in.(' + trozo.map(function (id) { return encodeURIComponent(id); }).join(',') + ')')
+      .forEach(function (f) { filas.push(f); });
+  }
+  return filas;
+}
+
 function borrarContenidoPorIdUnico_(idUnico) {
   supaBorrar_('contenido', 'id_unico=eq.' + encodeURIComponent(idUnico));
 }

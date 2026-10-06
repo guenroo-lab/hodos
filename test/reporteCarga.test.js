@@ -102,6 +102,7 @@ function contextoInforme(cargaFila, escaneados, palets, stubsExtra) {
     leerCargas_: () => [Object.assign({ idCarga: 'CARGA-1', estado: 'CERRADA' }, cargaFila)],
     leerEtiquetas_: () => escaneados || [],
     leerTodoContenidoCrudo_: () => [],
+    leerContenidoCrudoPorIds_: () => [],
     leerPaletesPorCarga_: () => palets || []
   }, stubsExtra));
 }
