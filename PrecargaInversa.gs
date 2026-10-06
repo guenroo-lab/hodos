@@ -32,7 +32,8 @@ function parsearCatalogoSoportes_(filas) {
     resultado.push({
       id: id,
       nombre: String(fila[1] == null ? '' : fila[1]).trim() || id,
-      tipo: String(fila[4] == null ? '' : fila[4]).trim() || 'Otros'
+      tipo: String(fila[4] == null ? '' : fila[4]).trim() || 'Otros',
+      fotoId: extraerIdDriveFoto_(fila[2])
     });
   }
   return resultado;
@@ -91,7 +92,7 @@ function fechaIsoONulo_(valor) {
 
 var CATALOGO_INVERSA_SHEET_ID_ = '1alOYhM53CHfu8elir0zttHwYFY8o5CLeRHDqaYwjRQY';
 var CATALOGO_INVERSA_PESTANA_ = 'CATALOGO_SOPORTES';
-var CATALOGO_INVERSA_CACHE_CLAVE_ = 'catalogo_inversa_v1';
+var CATALOGO_INVERSA_CACHE_CLAVE_ = 'catalogo_inversa_v2'; // v2: el catálogo ya trae fotoId
 var CATALOGO_INVERSA_CACHE_SEGUNDOS_ = 21600; // 6 h, el máximo de CacheService
 
 // Capa fina sobre SpreadsheetApp (los tests la sustituyen).
@@ -123,6 +124,90 @@ function obtenerCatalogoInversa() {
 // desde el editor; si no, el catálogo nuevo llega solo en un máximo de 6 horas).
 function limpiarCacheCatalogoInversa() {
   CacheService.getScriptCache().remove(CATALOGO_INVERSA_CACHE_CLAVE_);
+}
+
+// ── Fotos del catálogo ────────────────────────────────────────────────────────────────────
+// Las fotos del catálogo de Plataforma son archivos PRIVADOS de Drive: el navegador solo las ve con sesión
+// de Google (y con cookies de terceros, que un móvil suele bloquear). Por eso las miniaturas las baja el
+// servidor, que sí tiene acceso, y las manda dentro de la propia respuesta como data URI.
+
+var FOTO_INVERSA_CACHE_PREFIJO_ = 'foto_inversa_v1_';
+var FOTO_INVERSA_CACHE_SEGUNDOS_ = 21600;      // 6 h
+var FOTO_INVERSA_CACHE_FALLO_SEGUNDOS_ = 300;  // un fallo se recuerda 5 min para no insistir en cada pantalla
+var FOTO_INVERSA_MARCA_FALLO_ = '-';
+var FOTO_INVERSA_MAX_BYTES_ = 70000;           // CacheService admite 100 KB por entrada y base64 pesa un tercio más
+var FOTO_INVERSA_MAX_POR_LLAMADA_ = 10;
+var REGEX_ID_DRIVE_FOTO_ = /^[A-Za-z0-9_-]{10,100}$/;
+
+// Id del archivo de Drive a partir de los enlaces habituales (file/d/ID, open?id=ID, uc?id=ID). '' si no hay.
+function extraerIdDriveFoto_(url) {
+  var u = String(url == null ? '' : url).trim();
+  if (!u) return '';
+  var m = u.match(/\/d\/([A-Za-z0-9_-]{10,100})/) || u.match(/[?&]id=([A-Za-z0-9_-]{10,100})/);
+  return m ? m[1] : '';
+}
+
+// Capa fina sobre Drive (los tests la sustituyen o simulan DriveApp). null si no hay foto utilizable.
+function miniaturaDriveComoDataUri_(idArchivo) {
+  try {
+    var archivo = DriveApp.getFileById(idArchivo);
+    var blob = archivo.getThumbnail();
+    if (!blob) blob = archivo.getBlob(); // sin miniatura: sirve la imagen entera si es pequeña
+    if (!blob) return null;
+    var bytes = blob.getBytes();
+    if (!bytes || bytes.length === 0 || bytes.length > FOTO_INVERSA_MAX_BYTES_) return null;
+    var tipo = String(blob.getContentType() || '');
+    if (tipo.indexOf('image/') !== 0) return null;
+    return 'data:' + tipo + ';base64,' + Utilities.base64Encode(bytes);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Lo llama la pestaña por tandas (máximo 10 ids). Devuelve {idDrive: dataUri | null}. Solo se leen las fotos
+// que figuran en el catálogo: un id cualquiera no se pide nunca a Drive.
+function obtenerFotosCatalogoInversa(idsFoto) {
+  if (!Array.isArray(idsFoto)) throw new Error('Faltan las fotos a pedir');
+  if (idsFoto.length > FOTO_INVERSA_MAX_POR_LLAMADA_) {
+    throw new Error('Demasiadas fotos en una sola petición (máximo ' + FOTO_INVERSA_MAX_POR_LLAMADA_ + ')');
+  }
+  var permitidos = {};
+  obtenerCatalogoInversa().forEach(function (c) { if (c.fotoId) permitidos[c.fotoId] = true; });
+
+  var ids = [];
+  idsFoto.forEach(function (x) {
+    var id = String(x == null ? '' : x).trim();
+    if (ids.indexOf(id) === -1) ids.push(id);
+  });
+
+  var resultado = {};
+  var pedibles = [];
+  ids.forEach(function (id) {
+    if (!REGEX_ID_DRIVE_FOTO_.test(id) || !permitidos[id]) { resultado[id] = null; return; }
+    pedibles.push(id);
+  });
+
+  var cache = CacheService.getScriptCache();
+  var guardadas = {};
+  try {
+    if (pedibles.length) guardadas = cache.getAll(pedibles.map(function (id) { return FOTO_INVERSA_CACHE_PREFIJO_ + id; })) || {};
+  } catch (e) {
+    guardadas = {};
+  }
+  pedibles.forEach(function (id) {
+    var clave = FOTO_INVERSA_CACHE_PREFIJO_ + id;
+    var valor = guardadas[clave];
+    if (valor === FOTO_INVERSA_MARCA_FALLO_) { resultado[id] = null; return; }
+    if (valor) { resultado[id] = valor; return; }
+    var uri = miniaturaDriveComoDataUri_(id);
+    try {
+      cache.put(clave, uri || FOTO_INVERSA_MARCA_FALLO_, uri ? FOTO_INVERSA_CACHE_SEGUNDOS_ : FOTO_INVERSA_CACHE_FALLO_SEGUNDOS_);
+    } catch (e2) {
+      // Sin caché solo se pierde velocidad.
+    }
+    resultado[id] = uri;
+  });
+  return resultado;
 }
 
 // ── Datos de torres (tabla public.torres_inversa) ─────────────────────────────────────────

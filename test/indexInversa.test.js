@@ -59,6 +59,51 @@ test('agruparCatalogoInversa_ agrupa por tipo en el orden en que aparecen', () =
   ]);
 });
 
+test('cada fila del formulario lleva su foto (hueco gris hasta que llega la miniatura) y las fotos se piden por tandas', () => {
+  const codigo = bloqueInversa();
+  assert.match(codigo, /'<span class="inversa-ficha">' \+ fotoInversaHtml_\(c\)/);
+  assert.match(codigo, /cargarFotosInversa_\(catalogo\);/);
+  assert.match(codigo, /gas\('obtenerFotosCatalogoInversa', tanda\)/);
+  assert.match(html, /\.inversa-foto \{/);
+  assert.match(html, /\.inversa-ficha \{/);
+  assert.ok(!codigo.includes('/*'), 'no usar "/*" en una cadena: HtmlService corta la página');
+});
+
+test('fotoInversaHtml_: con fotoId lleva data-foto-id; sin foto solo el hueco gris', () => {
+  const ctx = { document: { getElementById: () => ({ addEventListener: () => {} }) }, escapeHtml_: (s) => String(s) };
+  vm.createContext(ctx);
+  vm.runInContext(bloqueInversa(), ctx);
+  const con = ctx.fotoInversaHtml_({ fotoId: 'ID_FOTO_12345' });
+  assert.match(con, /class="inversa-foto"/);
+  assert.match(con, /data-foto-id="ID_FOTO_12345"/);
+  assert.match(con, /src="data:image\/svg\+xml/);
+  const sin = ctx.fotoInversaHtml_({ fotoId: '' });
+  assert.ok(!/data-foto-id/.test(sin));
+});
+
+test('aplicarFotosInversa_: pone la miniatura; sin miniatura prueba el enlace directo y, si falla, deja el hueco gris', () => {
+  const imagenes = { AAAAAAAAAA1: [{ src: '' }], BBBBBBBBBB2: [{ src: '' }, { src: '' }] };
+  const consultas = [];
+  const ctx = {
+    document: {
+      getElementById: () => ({ addEventListener: () => {} }),
+      querySelectorAll: (sel) => { consultas.push(sel); const m = /data-foto-id="([^"]+)"/.exec(sel); return (m && imagenes[m[1]]) || []; }
+    },
+    escapeHtml_: (s) => String(s)
+  };
+  vm.createContext(ctx);
+  vm.runInContext(bloqueInversa(), ctx);
+  ctx.aplicarFotosInversa_({ AAAAAAAAAA1: 'data:image/png;base64,QUJD', BBBBBBBBBB2: null, 'raro"] , x': 'data:image/png;base64,ZZ' });
+  assert.strictEqual(imagenes.AAAAAAAAAA1[0].src, 'data:image/png;base64,QUJD');
+  imagenes.BBBBBBBBBB2.forEach((img) => {
+    assert.strictEqual(img.src, 'https://lh3.googleusercontent.com/d/BBBBBBBBBB2');
+    img.onerror();
+    assert.match(img.src, /^data:image\/svg\+xml/);
+    assert.strictEqual(img.onerror, null);
+  });
+  assert.strictEqual(consultas.length, 2, 'un id con caracteres raros no genera ningún selector');
+});
+
 test('textoDesgloseInversa_ junta las líneas con "cantidad × nombre"', () => {
   // El bloque engancha tres eventos al cargar: un document de mentira basta para ejecutarlo en vm.
   const ctx = { document: { getElementById: () => ({ addEventListener: () => {} }) } };

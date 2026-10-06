@@ -160,6 +160,8 @@
     .inversa-fila { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px; border:1px solid var(--input-border); border-radius:8px; background:var(--input-bg); margin-bottom:6px; }
     .inversa-fila.con-cantidad { border-color:var(--color-accent); }
     .inversa-nombre { font-weight:600; font-size:14px; }
+    .inversa-ficha { display:flex; align-items:center; gap:12px; min-width:0; }
+    .inversa-foto { width:56px; height:56px; object-fit:contain; border-radius:8px; background:#fff; border:1px solid var(--input-border); flex:none; }
     .inversa-cantidad { display:flex; align-items:center; gap:6px; }
     .inversa-fila input[type=number] { width:72px; text-align:center; font-size:16px; padding:8px; }
     .inversa-paso { width:38px; height:38px; border-radius:8px; border:1px solid var(--input-border); background:var(--bg-panel); color:var(--text-primary); font-size:20px; cursor:pointer; }
@@ -1462,6 +1464,43 @@
     pintarBadge_('inversa', cantidad, (Number(cantidad) || 0) + ' torre(s) pendiente(s) de cargar');
   }
 
+  // Hueco gris hasta que llega la miniatura (o si el soporte no tiene foto).
+  var FOTO_SIN_IMAGEN_INVERSA_ = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56'%3E%3Crect width='56' height='56' rx='8' fill='%23e5e5ea'/%3E%3C/svg%3E";
+
+  function fotoInversaHtml_(c) {
+    return '<img class="inversa-foto" alt="" ' + (c.fotoId ? 'data-foto-id="' + escapeHtml_(c.fotoId) + '" ' : '') + 'src="' + FOTO_SIN_IMAGEN_INVERSA_ + '">';
+  }
+
+  // mapa: {idDrive: dataUri | null}. Las fotos son privadas de Drive: la miniatura la manda el servidor. Si no ha
+  // podido, se prueba el enlace directo (solo se ve con sesión de Google) y, si falla, se queda el hueco gris.
+  function aplicarFotosInversa_(mapa) {
+    Object.keys(mapa || {}).forEach(function (idFoto) {
+      if (!/^[A-Za-z0-9_-]+$/.test(idFoto)) return;
+      var uri = mapa[idFoto];
+      var imgs = document.querySelectorAll('#inversaCatalogo img[data-foto-id="' + idFoto + '"]');
+      Array.prototype.forEach.call(imgs, function (img) {
+        if (uri) { img.src = uri; return; }
+        img.onerror = function () { img.onerror = null; img.src = FOTO_SIN_IMAGEN_INVERSA_; };
+        img.src = 'https://lh3.googleusercontent.com/d/' + idFoto;
+      });
+    });
+  }
+
+  // Las fotos se piden por tandas de 8, una detrás de otra: van apareciendo y no se satura Drive.
+  function cargarFotosInversa_(catalogo) {
+    var ids = [];
+    catalogo.forEach(function (c) { if (c.fotoId && ids.indexOf(c.fotoId) === -1) ids.push(c.fotoId); });
+    var tandas = [];
+    for (var i = 0; i < ids.length; i += 8) tandas.push(ids.slice(i, i + 8));
+    tandas.reduce(function (cadena, tanda) {
+      return cadena.then(function () {
+        return gas('obtenerFotosCatalogoInversa', tanda).then(aplicarFotosInversa_, function (err) {
+          console.error('No se pudieron cargar las fotos de los soportes:', err);
+        });
+      });
+    }, Promise.resolve());
+  }
+
   function pintarFormularioInversa_() {
     if (formularioInversaPintado_) return Promise.resolve();
     var cont = document.getElementById('inversaCatalogo');
@@ -1471,7 +1510,8 @@
         return '<div class="inversa-grupo"><h3>' + escapeHtml_(g.tipo) + '</h3>' + g.items.map(function (c) {
           var id = escapeHtml_(c.id);
           return '<div class="inversa-fila">' +
-            '<span class="inversa-nombre">' + escapeHtml_(c.nombre) + '</span>' +
+            '<span class="inversa-ficha">' + fotoInversaHtml_(c) +
+            '<span class="inversa-nombre">' + escapeHtml_(c.nombre) + '</span></span>' +
             '<span class="inversa-cantidad">' +
               '<button type="button" class="inversa-paso" data-id="' + id + '" data-paso="-1" aria-label="Quitar uno de ' + escapeHtml_(c.nombre) + '">−</button>' +
               '<input type="number" inputmode="numeric" min="0" step="1" data-id="' + id + '" aria-label="Cantidad de ' + escapeHtml_(c.nombre) + '">' +
@@ -1480,6 +1520,7 @@
         }).join('') + '</div>';
       }).join('');
       formularioInversaPintado_ = true;
+      cargarFotosInversa_(catalogo);
     });
   }
 

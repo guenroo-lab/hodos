@@ -43,9 +43,9 @@ test('parsearCatalogoSoportes_: salta la cabecera, recorta, excluye piezas suelt
     ['S99', '', '', '', '']
   ];
   assert.deepStrictEqual(aLocal(ctx.parsearCatalogoSoportes_(filas)), [
-    { id: 'S01', nombre: 'EUROPEO', tipo: 'Palet' },
-    { id: 'S17', nombre: 'SVR (Completo)', tipo: 'Jaula Completa' },
-    { id: 'S99', nombre: 'S99', tipo: 'Otros' }
+    { id: 'S01', nombre: 'EUROPEO', tipo: 'Palet', fotoId: '' },
+    { id: 'S17', nombre: 'SVR (Completo)', tipo: 'Jaula Completa', fotoId: '' },
+    { id: 'S99', nombre: 'S99', tipo: 'Otros', fotoId: '' }
   ]);
 });
 
