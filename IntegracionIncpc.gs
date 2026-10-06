@@ -165,6 +165,12 @@ function crearLoteArrastreDesdeMacroArrastres_(datos) {
   // etiqueta (dato de Pedro, 2026-09-07). Sin expedición no se deduplica: mejor una
   // etiqueta de más, que se ve y se tira, que una de menos, que no se ve.
   var lineas = parsearLotePedidos(pedidosTexto);
+  // Línea de abajo de la etiqueta (Antequera: "PED. PROV. 81406165", 2026-10-06): MacroArrastres manda
+  // `sufijosOrigen`, un array alineado 1:1 con las líneas de pedidosTexto. Solo se usa si llega EXACTAMENTE
+  // alineado; cualquier otra cosa se ignora (nunca descoloca etiquetas) y la etiqueta sale como siempre.
+  var sufijos = (Array.isArray(datos.sufijosOrigen) && datos.sufijosOrigen.length === lineas.length)
+    ? datos.sufijosOrigen.map(function (s) { return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().substring(0, 60); })
+    : [];
 
   // Solo MECO (dato del usuario, 2026-09-18): a diferencia del resto de orígenes, el
   // "número de pedido" de MECO identifica ya un SOPORTE físico, no un pedido con
@@ -185,6 +191,7 @@ function crearLoteArrastreDesdeMacroArrastres_(datos) {
         + ' línea(s) duplicada(s) en el documento de origen, ignoradas: ' + lineas.join(','));
     }
     lineas = lineasSinDuplicar_;
+    sufijos = [];   // MECO no manda sufijos; y al colapsar duplicados dejarían de estar alineados
   }
 
   var omitidos = [];
@@ -210,20 +217,23 @@ function crearLoteArrastreDesdeMacroArrastres_(datos) {
   try {
     if (expedicion) {
       var yaCreados = _conteoPedidosYaCreadosEnExpedicion_(origen, destino, expedicion);
-      var nuevas = [];
-      lineas.forEach(function (l) {
-        if (yaCreados[l] > 0) { yaCreados[l]--; omitidos.push(l); } else { nuevas.push(l); }
+      var nuevas = [], nuevosSufijos = [];
+      lineas.forEach(function (l, i) {
+        if (yaCreados[l] > 0) { yaCreados[l]--; omitidos.push(l); } else { nuevas.push(l); nuevosSufijos.push(sufijos[i] || ''); }
       });
       lineas = nuevas;
+      if (sufijos.length) sufijos = nuevosSufijos;
     }
     if (lineas.length === 0) {
       return { ok: true, idsCreados: [], omitidos: omitidos };
     }
 
-    var resultado = registrarLote({
+    var datosLote = {
       origen: origen, destino: destino, pedidosTexto: lineas.join('\n'),
       creadoPor: creadoPor, expedicion: expedicion
-    });
+    };
+    if (sufijos.length) datosLote.sufijosOrigen = sufijos;
+    var resultado = registrarLote(datosLote);
 
     // Marca TODO el lote de una vez (por loteId) como pendiente de imprimir, para que
     // salga en la pestaña de su plataforma. Misma bandera que Incidencias/Peticiones de

@@ -49,6 +49,9 @@ function registrarLote(datos) {
     origenTienda = validarTienda(datos.origenTienda);
   }
   var origenTexto = formatearOrigenTexto(datos.origen, datos.origen === 'Cesión' ? origenTienda : subtipo);
+  // Línea de abajo opcional por etiqueta (arrastres de Antequera: "PED. PROV. 81406165"), alineada 1:1 con las
+  // líneas del lote. Se guarda tras " · " en origenTexto (sin columna nueva) y htmlUnaEtiqueta_ la pinta aparte.
+  var sufijosOrigen = (Array.isArray(datos.sufijosOrigen) && datos.sufijosOrigen.length === lineas.length) ? datos.sufijosOrigen : [];
   var soportes = calcularSoportes(lineas);
   var ids = siguienteBloqueIdsEtiquetas_(lineas.length);
   var loteId = Utilities.getUuid();
@@ -60,7 +63,7 @@ function registrarLote(datos) {
   var filas = soportes.map(function (s, i) {
     return {
       idUnico: ids[i], numeroPedido: s.numeroPedido, soporteNum: s.soporteNum, soporteTotal: s.soporteTotal,
-      origen: datos.origen, subtipo: subtipo, origenTexto: origenTexto, destino: datos.destino,
+      origen: datos.origen, subtipo: subtipo, origenTexto: origenTextoConSufijo(origenTexto, sufijosOrigen[i]), destino: datos.destino,
       fechaCreacion: fecha, loteId: loteId, creadoPor: creadoPor, estado: 'REGISTRADO',
       bateaId: null, fechaEnvio: null, origenTienda: origenTienda, razonFlujo: razonFlujo,
       // Solo la usa la integración de arrastres (MacroArrastres), para poder distinguir
@@ -135,6 +138,16 @@ function obtenerEtiquetasPorLote_(loteId) {
   return leerEtiquetas_('lote_id=eq.' + encodeURIComponent(loteId) + '&order=soporte_num.asc');
 }
 
+// El origen de la etiqueta ("ANTEQUERA") puede llevar detrás " · " + una línea de abajo (nº de pedido proveedor).
+// Sin ella el HTML es exactamente el de siempre; con ella, las dos líneas van juntas en un único bloque (la etiqueta
+// reparte sus hijos con space-between, así que separadas quedarían alejadas).
+function origenInfoHtml_(origenTexto) {
+  var partes = String(origenTexto == null ? '' : origenTexto).split(SEPARADOR_SUFIJO_ORIGEN_);
+  if (partes.length < 2) return '<div class="origen-info">' + esc_(origenTexto) + '</div>';
+  return '<div class="origen-bloque"><div class="origen-info">' + esc_(partes[0]) + '</div>' +
+    '<div class="origen-prov">' + esc_(partes.slice(1).join(SEPARADOR_SUFIJO_ORIGEN_)) + '</div></div>';
+}
+
 function htmlUnaEtiqueta_(e, fechaTxt) {
   // El barcode codifica el idUnico (único SIEMPRE, por fila/soporte), no el número de
   // pedido: así cada etiqueta física es inequívoca al escanear (ver seleccionarSoporteAEscanear
@@ -147,7 +160,11 @@ function htmlUnaEtiqueta_(e, fechaTxt) {
   // etiqueta física — lineasNumeroPedidoEtiqueta (Utilidades.gs) los resume como
   // "AGRUPACIÓN (N)" en vez de listarlos todos. El barcode sigue codificando idUnico
   // (no numeroPedido), así que el soporte se identifica igual de bien escaneando.
-  var numeroPedidoHtml = '<div class="numero-pedido-h' + (esGrupo ? ' numero-pedido-grupo' : '') + '">' +
+  // Grupo de 4-5 pedidos CON línea de abajo (nº de pedido proveedor): no cabe con el interlineado normal (sobraban 3 mm),
+  // así que solo en ese caso se compacta. Sin línea de abajo la etiqueta es exactamente la de siempre.
+  var conProv = String(e.origenTexto == null ? '' : e.origenTexto).indexOf(SEPARADOR_SUFIJO_ORIGEN_) >= 0;
+  var compacto = esGrupo && conProv && pedidos.length >= 4 && pedidos.length <= UMBRAL_AGRUPACION_ETIQUETA_;
+  var numeroPedidoHtml = '<div class="numero-pedido-h' + (esGrupo ? ' numero-pedido-grupo' : '') + (compacto ? ' con-prov' : '') + '">' +
     lineasNumeroPedidoEtiqueta(pedidos).map(esc_).join('<br>') + '</div>';
   // El badge de soporte SOLO se muestra si el pedido (no agrupado) tiene más de un
   // soporte en este lote — las etiquetas agrupadas NUNCA llevan badge de soporte
@@ -167,7 +184,7 @@ function htmlUnaEtiqueta_(e, fechaTxt) {
     '<div class="tienda-destino">' + esc_(e.destino) + '</div>' +
     numeroPedidoHtml +
     soporteHtml +
-    '<div class="origen-info">' + esc_(e.origenTexto) + '</div>' +
+    origenInfoHtml_(e.origenTexto) +
     '<div class="etiqueta-bottom">' + logoLmHtml + '<div class="barcode-wrap">' + barcodeSvg + '</div></div>' +
     '</div></div>';
 }
@@ -223,8 +240,10 @@ function envolverEtiquetasHtml_(tarjetas) {
     '.tienda-destino{font-size:30px;font-weight:900;text-transform:uppercase;text-align:center;}',
     '.numero-pedido-h{font-size:46px;font-weight:900;text-align:center;letter-spacing:2mm;}',
     '.numero-pedido-h.numero-pedido-grupo{font-size:22px;letter-spacing:1mm;line-height:1.3;}',
+    '.numero-pedido-h.numero-pedido-grupo.con-prov{line-height:1.15;}',
     '.soporte-badge{font-size:14px;font-weight:700;text-align:center;color:#333;margin-top:-2mm;}',
     '.origen-info{font-size:26px;font-weight:900;color:#e30613;text-transform:uppercase;text-align:center;}',
+    '.origen-prov{font-size:15px;font-weight:700;color:#333;text-transform:uppercase;text-align:center;margin-top:1mm;}',
     '.etiqueta-bottom{display:flex;align-items:center;justify-content:space-between;}',
     '.logo-lm{height:10mm;width:auto;}',
     '.barcode-wrap{flex:1;display:flex;justify-content:center;}'

@@ -18,6 +18,15 @@ function formatearOrigenTexto(origen, detalle) {
   return String(origen).toUpperCase();
 }
 
+// Separador entre el origen y su línea de abajo opcional ("ANTEQUERA · PED. PROV. 81406165"). Es un carácter que
+// ningún origen/subtipo/tienda usa, así que partir por él nunca corta un origenTexto de los de siempre.
+var SEPARADOR_SUFIJO_ORIGEN_ = ' · ';
+
+function origenTextoConSufijo(origenTexto, sufijo) {
+  var s = String(sufijo == null ? '' : sufijo).replace(/\s+/g, ' ').trim();
+  return s ? origenTexto + SEPARADOR_SUFIJO_ORIGEN_ + s : origenTexto;
+}
+
 function mensajeCesionInvalida_(motivo) {
   var mensajes = {
     ORIGEN_IGUAL_DESTINO: 'La tienda de origen y la de destino de la cesión no pueden ser la misma',
