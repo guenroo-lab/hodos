@@ -135,7 +135,14 @@ var FOTO_INVERSA_CACHE_PREFIJO_ = 'foto_inversa_v1_';
 var FOTO_INVERSA_CACHE_SEGUNDOS_ = 21600;      // 6 h
 var FOTO_INVERSA_CACHE_FALLO_SEGUNDOS_ = 300;  // un fallo se recuerda 5 min para no insistir en cada pantalla
 var FOTO_INVERSA_MARCA_FALLO_ = '-';
-var FOTO_INVERSA_MAX_BYTES_ = 70000;           // CacheService admite 100 KB por entrada y base64 pesa un tercio más
+// Dos topes distintos (error del 2026-10-06: con uno solo de 70 KB, la miniatura de JAULA —82 KB— y otras dos
+// no llegaban nunca y en el móvil se quedaban en gris):
+//  - FOTO_INVERSA_MAX_BYTES_: lo máximo que se ENVÍA al navegador. Las miniaturas de Drive miden 4-96 KB.
+//  - FOTO_INVERSA_MAX_CHARS_CACHE_: lo máximo que se GUARDA en caché. CacheService admite 100 KB (102.400) por
+//    entrada y el data URI es texto (base64 pesa un tercio más que los bytes). Una miniatura mayor se sirve
+//    igual, pero se vuelve a pedir a Drive cada vez.
+var FOTO_INVERSA_MAX_BYTES_ = 400000;
+var FOTO_INVERSA_MAX_CHARS_CACHE_ = 95000;
 var FOTO_INVERSA_MAX_POR_LLAMADA_ = 10;
 var REGEX_ID_DRIVE_FOTO_ = /^[A-Za-z0-9_-]{10,100}$/;
 
@@ -152,7 +159,7 @@ function miniaturaDriveComoDataUri_(idArchivo) {
   try {
     var archivo = DriveApp.getFileById(idArchivo);
     var blob = archivo.getThumbnail();
-    if (!blob) blob = archivo.getBlob(); // sin miniatura: sirve la imagen entera si es pequeña
+    if (!blob) blob = archivo.getBlob(); // sin miniatura: sirve la imagen entera si no es enorme
     if (!blob) return null;
     var bytes = blob.getBytes();
     if (!bytes || bytes.length === 0 || bytes.length > FOTO_INVERSA_MAX_BYTES_) return null;
@@ -201,7 +208,9 @@ function obtenerFotosCatalogoInversa(idsFoto) {
     if (valor) { resultado[id] = valor; return; }
     var uri = miniaturaDriveComoDataUri_(id);
     try {
-      cache.put(clave, uri || FOTO_INVERSA_MARCA_FALLO_, uri ? FOTO_INVERSA_CACHE_SEGUNDOS_ : FOTO_INVERSA_CACHE_FALLO_SEGUNDOS_);
+      if (!uri) cache.put(clave, FOTO_INVERSA_MARCA_FALLO_, FOTO_INVERSA_CACHE_FALLO_SEGUNDOS_);
+      else if (uri.length <= FOTO_INVERSA_MAX_CHARS_CACHE_) cache.put(clave, uri, FOTO_INVERSA_CACHE_SEGUNDOS_);
+      // Una miniatura mayor que una entrada de caché se sirve igual, pero no se guarda (ni se marca como fallo).
     } catch (e2) {
       // Sin caché solo se pierde velocidad.
     }

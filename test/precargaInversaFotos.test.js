@@ -102,15 +102,42 @@ test('obtenerFotosCatalogoInversa: si Drive falla devuelve null, lo recuerda 5 m
   assert.strictEqual(llamadasDrive.length, 1, 'la segunda vez usa la marca de fallo');
 });
 
-test('obtenerFotosCatalogoInversa: sin miniatura usa la imagen si es pequeña; si es grande o no es imagen, null', () => {
+test('obtenerFotosCatalogoInversa: sin miniatura usa la imagen si no es enorme; si es enorme o no es imagen, null', () => {
   const pequena = { getThumbnail: () => null, getBlob: () => blob([9, 9], 'image/jpeg') };
-  const grande = { getThumbnail: () => blob(new Array(70001).fill(1), 'image/png'), getBlob: () => null };
+  const enorme = { getThumbnail: () => blob(new Array(400001).fill(1), 'image/png'), getBlob: () => null };
   const noImagen = { getThumbnail: () => blob([1], 'text/html'), getBlob: () => null };
-  const { ctx } = cargarFotos({ archivos: { [ID_A]: pequena, [ID_B]: grande } });
+  const { ctx } = cargarFotos({ archivos: { [ID_A]: pequena, [ID_B]: enorme } });
   assert.strictEqual(ctx.obtenerFotosCatalogoInversa([ID_A])[ID_A], 'data:image/jpeg;base64,CQk=');
   assert.strictEqual(ctx.obtenerFotosCatalogoInversa([ID_B])[ID_B], null);
   const { ctx: ctx2 } = cargarFotos({ archivos: { [ID_A]: noImagen } });
   assert.strictEqual(ctx2.obtenerFotosCatalogoInversa([ID_A])[ID_A], null);
+});
+
+// Caso real (2026-10-06): las miniaturas de JAULA (81.786 bytes), R01 (76.453) y R02 (95.663) pasaban de los
+// 70 KB que se aceptaban, el servidor las daba por fallidas y en el móvil se quedaban en gris (en el PC salían
+// por el enlace directo, que solo funciona con sesión de Google).
+test('obtenerFotosCatalogoInversa: una miniatura de 82 KB (la de JAULA) SE ENVÍA, aunque no quepa en la caché', () => {
+  const { ctx, puestas, llamadasDrive } = cargarFotos({ archivos: { [ID_A]: { getThumbnail: () => blob(new Array(81786).fill(7), 'image/png'), getBlob: () => null } } });
+  const r = ctx.obtenerFotosCatalogoInversa([ID_A]);
+  assert.ok(r[ID_A] && r[ID_A].indexOf('data:image/png;base64,') === 0, 'debe llegar el data URI');
+  assert.ok(r[ID_A].length > 100000, 'el data URI no cabe en una entrada de caché (100 KB)');
+  assert.strictEqual(puestas.filter((p) => p.clave === 'foto_inversa_v1_' + ID_A).length, 0, 'no se guarda ni como foto ni como fallo');
+  ctx.obtenerFotosCatalogoInversa([ID_A]);
+  assert.strictEqual(llamadasDrive.length, 2, 'al no estar en caché se vuelve a pedir a Drive');
+});
+
+test('obtenerFotosCatalogoInversa: lo que cabe en una entrada de caché (~71 KB de imagen) se guarda; lo que no, no', () => {
+  // El tope es en caracteres del data URI (95.000, con margen bajo los 102.400 de CacheService): 71.000 bytes
+  // dan 94.690 caracteres y 72.000 bytes dan 96.022.
+  const cabe = { getThumbnail: () => blob(new Array(71000).fill(3), 'image/png'), getBlob: () => null };
+  const noCabe = { getThumbnail: () => blob(new Array(72000).fill(3), 'image/png'), getBlob: () => null };
+  const { ctx, puestas } = cargarFotos({ archivos: { [ID_A]: cabe, [ID_B]: noCabe } });
+  const r = ctx.obtenerFotosCatalogoInversa([ID_A, ID_B]);
+  assert.ok(r[ID_A] && r[ID_B], 'las dos se envían');
+  const guardada = puestas.find((p) => p.clave === 'foto_inversa_v1_' + ID_A);
+  assert.ok(guardada && guardada.valor === r[ID_A], 'la de 71.000 bytes se guarda');
+  assert.ok(guardada.valor.length <= 102400, 'y cabe en una entrada de CacheService');
+  assert.strictEqual(puestas.filter((p) => p.clave === 'foto_inversa_v1_' + ID_B).length, 0, 'la de 72.000 bytes no se guarda');
 });
 
 test('obtenerFotosCatalogoInversa: entrada inválida o demasiadas fotos de golpe es un error', () => {
