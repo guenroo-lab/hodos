@@ -13,7 +13,8 @@ app de **Plataforma** (proyecto Apps Script aparte, scriptId
 - El estado vivo del camión está en Firebase Realtime Database
   (`carga_torija/<FLETE>` = `{ flete, soportes: { S01: 17, S16: 5, ... } }`).
 - "Finalizar Carga y PDF" (`guardarExpedicionTorija`) escribe una fila en la hoja
-  `SALIDAS_A` del documento externo, genera la carta de porte en PDF, la envía por
+  `SALIDAS_A` del documento externo (el **control de soportes**, histórico de
+  soportes cargados del equipo), genera la carta de porte en PDF, la envía por
   email a administración y borra el camión de Firebase.
 
 No hay escaneo ni trazabilidad de qué torre va dentro de cada camión: solo un
@@ -32,23 +33,29 @@ mantiene.
    camión se les asigna al bipar.
 3. **HODOS no genera ningún informe, PDF ni email.** Eso lo sigue haciendo
    Plataforma al finalizar.
-4. **Al cargarse, la torre desaparece de HODOS** sin más gestión (sin cargas, sin
-   cierre). Se **oculta guardando rastro** (flete, quién y cuándo) en vez de
-   borrarse: así un segundo bip avisa "ya cargada" y no se suma dos veces.
+4. **HODOS no guarda ningún rastro de lo cargado.** Al bipar una torre, HODOS la
+   elimina sin más. El histórico de soportes cargados ya lo escribe Plataforma en
+   su control de soportes (`SALIDAS_A`); duplicarlo en HODOS no aporta nada.
+   (Decisión del 2026-10-06; sustituye a una propuesta anterior de ocultar la torre
+   guardando flete y hora.)
 5. **Se modifica la app de Plataforma** (el usuario confirmó que es suya o de su
    equipo) para añadir el bipado en el camión de Torija.
 6. **El escáner de cámara replica el modelo de Kairos** (cámara en directo en
-   pestaña nueva), no el de foto de SIE.
-7. Los selects y listas **no llevan nada preseleccionado** (regla del usuario).
+   pestaña nueva), no el de foto de SIE, y trabaja en **modo continuo**: la pestaña
+   del escáner se queda abierta leyendo torre tras torre.
+7. **Prueba directamente en la app real** de Plataforma (sin copia de pruebas), con
+   un flete de prueba y a una hora tranquila.
+8. Los selects y listas **no llevan nada preseleccionado** (regla del usuario).
    Nada de diálogos nativos del navegador: modales propios.
 
 ## Fuera de alcance
 
 - Informe, PDF o email desde HODOS.
 - Cargas, cierre de carga o escaneo de camión de inversa dentro de HODOS.
+- Histórico o rastro de torres cargadas en HODOS.
 - Cambios en `SALIDAS_A`, en el PDF o en el correo de Plataforma.
 - La Inversa de **tiendas** (recepción) de Plataforma: no se toca.
-- Torres que mezclen destinos: el destino es siempre Torija.
+- Torres con otro destino que no sea Torija.
 
 ## Qué verá cada persona
 
@@ -56,11 +63,11 @@ mantiene.
 
 - **Nueva torre:** una rejilla con los tipos del catálogo, agrupados por tipo de
   soporte (Palet, Jaula completa, Otros...), cada uno con su cantidad (vacía por
-  defecto). Botón "Crear e imprimir etiqueta". Sin tipos o sin ninguna cantidad
-  mayor que 0 no se puede crear.
+  defecto). Botón "Crear e imprimir etiqueta". Sin ninguna cantidad mayor que 0 no
+  se puede crear.
 - **Torres precargadas:** lista de las torres pendientes (más antigua primero) con
   su desglose y total. Encima, un resumen "Total precargado" por tipo. Acciones por
-  torre: reimprimir, editar y borrar (solo mientras esté pendiente).
+  torre: reimprimir, editar y borrar.
 - **Insignia numérica** en la barra lateral con el número de torres pendientes
   (mismo estilo que las pestañas de Arrastres).
 - **Etiqueta Zebra 100×150:** logo Taisa, "INVERSA · TORIJA", código `INV-000123`
@@ -92,20 +99,13 @@ create table public.torres_inversa (
   id_unico       text primary key,                       -- INV-000123
   lineas         jsonb not null,                         -- [{"id":"S01","nombre":"EUROPEO","cantidad":17}, ...]
   total_soportes integer not null,                       -- suma de cantidades, calculada en servidor
-  estado         text not null default 'PRECARGADA',     -- PRECARGADA | CARGADA
   creado_por     text,
   fecha_creacion timestamptz not null default now(),
-  flete          text,                                   -- solo si CARGADA
-  cargado_por    text,
-  fecha_carga    timestamptz,
   constraint torres_inversa_lineas_array check (jsonb_typeof(lineas) = 'array' and jsonb_array_length(lineas) > 0),
   constraint torres_inversa_total_positivo check (total_soportes > 0)
 );
 
 alter table public.torres_inversa enable row level security;
-
-create index torres_inversa_pendientes_idx
-  on public.torres_inversa (fecha_creacion) where estado = 'PRECARGADA';
 
 create or replace function public.siguiente_id_torre_inversa() returns text
 language plpgsql as $$
@@ -121,19 +121,15 @@ grant  execute on function public.siguiente_id_torre_inversa() to service_role;
 
 Decisiones de datos:
 
+- **Una fila existe solo mientras la torre está pendiente.** No hay `estado`, ni
+  `flete`, ni fecha de carga: cargar una torre es borrarla. La tabla se mantiene
+  siempre pequeña y no hace falta índice ni purga.
 - **`lineas` como `jsonb` y no tabla de líneas:** una torre se crea, se lee y se
   consume siempre entera. Una sola fila hace atómico el consumo y ahorra consultas
   (importante: el proyecto está en plan Free y vigilado por egress).
-- **Sin `check` sobre `estado`:** en Kairos un valor de estado nuevo obligó dos veces
-  a migrar el `check`. El estado se valida en código y en el filtro condicional del
-  consumo.
 - **Prefijo `INV-`:** distinto de `HODOS-` a propósito. En "Cargar camión" de HODOS,
   `escanearSoporte` trata de forma especial lo que empieza por `HODOS-`; una etiqueta
   `INV-` bipada por error allí simplemente no se encuentra, sin efectos.
-- **Lectura de la lista:** solo `estado=eq.PRECARGADA`, con el índice parcial.
-  Las torres `CARGADA` quedan como rastro y no se vuelven a leer en las pantallas.
-- **Retención:** las torres cargadas se conservan (son pocas y diminutas). Se
-  revisará una purga si algún día hiciera falta.
 
 ## HODOS — backend
 
@@ -143,10 +139,10 @@ Google solo en la capa fina), expuesto a `google.script.run`:
 | Función | Qué hace |
 | --- | --- |
 | `obtenerCatalogoInversa()` | Lee `CATALOGO_SOPORTES` del documento `1alOYhM53CHfu8elir0zttHwYFY8o5CLeRHDqaYwjRQY` (el mismo que usa Plataforma), con caché de 6 h en `CacheService`. Excluye las piezas sueltas que Plataforma ya excluye en Torija (`S17_L`, `S17_B`, `S18_L`, `S18_B`, `S19_B`) y los ids basura `S19_L` y `S19_LSVP_LAT_DO`. Devuelve `{id, nombre, tipo}`. |
-| `crearTorreInversa(lineas)` | Valida con `normalizarLineasTorre_` (descarta cantidades ≤ 0 o no enteras, ids fuera del catálogo, duplicados se suman), pide el id con la RPC, inserta y devuelve la torre. |
-| `listarTorresInversa()` | Torres `PRECARGADA` + resumen por tipo. |
-| `actualizarTorreInversa(id, lineas)` | Solo si sigue `PRECARGADA` (PATCH condicionado). |
-| `borrarTorreInversa(id)` | Solo si sigue `PRECARGADA` (DELETE condicionado). |
+| `crearTorreInversa(lineas)` | Valida con `normalizarLineasTorre_` (descarta cantidades ≤ 0 o no enteras, ids fuera del catálogo; ids repetidos se suman), pide el id con la RPC, inserta y devuelve la torre. |
+| `listarTorresInversa()` | Todas las torres de la tabla (todas son pendientes) + resumen por tipo. |
+| `actualizarTorreInversa(id, lineas)` | Reemplaza el contenido de una torre existente. |
+| `borrarTorreInversa(id)` | Borra una torre. |
 | `htmlEtiquetasTorresInversa(ids)` | HTML de impresión con `envolverEtiquetasHtml_`, ampliada con un parámetro opcional de estilo extra que no cambia la salida de las etiquetas actuales. |
 | `contarTorresInversaPendientes()` | Número para la insignia. Función propia, sin tocar `contarEtiquetasPendientesPorPestana`; se llama desde el mismo refresco de insignias que ya existe en `Index.html`. |
 
@@ -157,99 +153,119 @@ usa INCPC (`UrlFetchApp` con `Authorization: Bearer ScriptApp.getOAuthToken()` m
 el token en el cuerpo). El enrutado de las acciones nuevas va en una función aparte
 (`procesarAccionInversa_`) con una sola línea en `doPost`.
 
-**`consumirTorreInversa { id, flete, operario }`**
+**`consumirTorreInversa { id }`**
 
-PATCH condicionado a `estado=eq.PRECARGADA` que fija `estado=CARGADA`, `flete`
-(en mayúsculas, sin espacios, como lo guarda Plataforma), `cargado_por` y
-`fecha_carga`. Mismo patrón optimista que `actualizarEtiquetaCondicional_`: si dos
-bips casi simultáneos llegan a la vez, solo uno gana.
+`DELETE` con `Prefer: return=representation` (`supaBorrar_` ya devuelve las filas
+realmente borradas). Si borró una fila, esa llamada ha ganado y devuelve su
+contenido; si no borró ninguna, otra llamada se adelantó o la torre no existe. Es
+atómico: dos bips casi simultáneos de la misma torre no pueden sumarla dos veces.
 
 | Resultado | Respuesta |
 | --- | --- |
-| Torre consumida | `{ok:true, id, lineas:[...], total}` |
-| Ya estaba cargada **en este mismo flete** | `{ok:true, repetida:true, id, lineas, total}` |
-| Ya cargada en **otro** flete | `{ok:false, motivo:'YA_CARGADA', flete, fecha}` |
-| No existe | `{ok:false, motivo:'NO_EXISTE'}` |
+| Torre consumida | `{ok:true, id, lineas:[...], total, creadaEn}` |
+| No existe (ya cargada, borrada o código inventado) | `{ok:false, motivo:'NO_EXISTE'}` |
 
-El caso `repetida` es la red de seguridad: si HODOS marcó la torre pero a
-Plataforma le falló guardar en Firebase, volver a bipar la recupera sin duplicarla
-(Plataforma solo suma si esa torre no está ya en su lista `torres` del camión).
+**`devolverTorreInversa { id, lineas, creadaEn }`**
 
-**`devolverTorreInversa { id, flete }`**
-
-PATCH condicionado a `estado=eq.CARGADA&flete=eq.<flete>` que la vuelve a
-`PRECARGADA` y limpia `flete`, `cargado_por`, `fecha_carga`.
-`{ok:true}` o `{ok:false, motivo:'NO_CARGADA_EN_ESTE_FLETE' | 'NO_EXISTE'}`.
+Deshace un consumo (el operario de Plataforma quitó la torre del camión, o borró el
+camión entero). Plataforma guarda el contenido de cada torre bipada en su lista
+`torres`, así que lo manda de vuelta y HODOS **vuelve a crear la torre con el mismo
+id** (la etiqueta física sigue siendo válida). El contenido se vuelve a validar con
+`normalizarLineasTorre_` contra el catálogo. Si el id ya existe, responde
+`{ok:false, motivo:'YA_EXISTE'}` sin tocar nada.
 
 ## Plataforma — cambios
 
 Todos **aditivos**: no se quita ni se cambia nada de lo que hace hoy.
 
-- **Nodo de Firebase:** `carga_torija/<FLETE>/torres/<INV-id>` = `{lineas, hora}`,
-  escrito solo por el flujo de bipado. El código actual lo ignora y lo conserva (solo
-  sobrescribe `.soportes`).
-- **Servidor (`Backend_Inversa.js`):** `consumirTorreEnHodos(id, flete, operario)` y
-  `devolverTorreEnHodos(id, flete)`, que llaman al webhook de HODOS. URL y token en
-  las propiedades del script (`HODOS_WEBAPP_URL`, `HODOS_SHARED_TOKEN`), igual que
-  INCPC. Si HODOS no responde, devuelven un error legible y **no cambia nada**; el
-  operario sigue pudiendo añadir a mano.
+- **Interruptor de seguridad:** el bloque "Bipar torre" solo aparece si en las
+  propiedades del script están `HODOS_WEBAPP_URL` y `HODOS_SHARED_TOKEN`
+  (`bipadoInversaDisponible()` en el servidor). Se despliega con ambas **sin
+  configurar** (la app se ve y se comporta exactamente como hoy) y se activa al
+  configurarlas. Quitarlas es la vuelta atrás inmediata, sin redesplegar.
+- **Nodo de Firebase:** `carga_torija/<FLETE>/torres/<INV-id>` = `{lineas, creadaEn,
+  hora}`, escrito solo por el flujo de bipado. El código actual lo ignora y lo
+  conserva (solo sobrescribe `.soportes`).
+- **Servidor (`Backend_Inversa.js`):** `consumirTorreEnHodos(id)` y
+  `devolverTorreEnHodos(id, lineas, creadaEn)`, que llaman al webhook de HODOS. Si
+  HODOS no responde, devuelven un error legible y **no cambia nada**; el operario
+  sigue pudiendo añadir a mano.
 - **Cliente (`Modulo_Plataforma.html`, `JS_Plataforma.html`):** campo "Bipar torre",
   lista "Torres bipadas" y el escáner.
+- **Duplicados:** antes de llamar a HODOS, Plataforma mira en su propio estado
+  (`CamionesTorijaAbiertos[*].torres`) si esa torre ya está bipada en este camión o
+  en otro camión abierto, y avisa ("ya está en este camión" / "ya está en el flete
+  X") sin llamar a HODOS. Para una torre cuyo camión ya se finalizó, HODOS responde
+  `NO_EXISTE`.
 - **Suma y resta:** al consumir, suma `lineas` a `SoportesSeleccionadosTorija` y
   guarda con `guardarMemoriaTorija()`, igual que el flujo manual. Al quitar, resta
   esas cantidades con mínimo 0 y avisa si la cantidad actual era menor que la que se
   iba a restar (el operario pudo rectificar a mano entre medias).
 - **Borrar un camión de Torija con torres bipadas:** antes de borrarlo se devuelven
   a HODOS (con aviso si alguna falla), para que no se pierdan.
-- **Finalizar:** sin cambios. Las torres quedan `CARGADA` en HODOS.
+- **Finalizar:** sin cambios. Las torres ya no existen en HODOS y su contenido queda
+  en el conteo que Plataforma escribe en `SALIDAS_A`.
 
-### Escáner de cámara (modelo de Kairos)
+### Escáner de cámara continuo (modelo de Kairos)
 
 El iframe de Apps Script bloquea la cámara en directo; la solución confirmada en
 real (portal de Kairos, v88, Android) es abrir una **pestaña nueva** desde el clic
 del botón, escribirle el escáner con `document.write` y comunicarse con
 `postMessage` validando `ev.source`. Se copia `abrirEscanerEnPestana_` /
-`escanerHtml_` de `Kairos/kairos-portal/Portal.html`, con otro nombre de mensaje y
-título "Inversa · Escanear torre". Lee con `BarcodeDetector` nativo y ZXing como
-respaldo; `code_128` ya está en la lista de formatos, que es el que lleva la
-etiqueta.
+`escanerHtml_` de `Kairos/kairos-portal/Portal.html` (lectura con `BarcodeDetector`
+nativo y ZXing de respaldo; `code_128` ya está en la lista de formatos), con otro
+nombre de mensaje y título "Inversa · Escanear torres", y se amplía a **modo
+continuo**:
 
-- **Versión 1:** igual que Kairos: la pestaña lee un código y se cierra; el
-  resultado se aplica en el camión; para la siguiente torre se vuelve a pulsar el
-  botón. Probado en real.
-- **Modo continuo (a probar en la tablet real, no se promete):** la pestaña se
-  quedaría abierta leyendo torre tras torre y avisando de cada una. Riesgo
-  conocido: mientras la pestaña del escáner está delante, el navegador puede
-  ralentizar la pestaña de Plataforma. Solo se activaría si funciona en el
-  dispositivo real.
-- **Siempre disponible:** escribir el código o pistola, y si el navegador bloquea la
-  pestaña, el campo de texto sigue funcionando.
+- La pestaña **no se cierra al leer**. Envía el código a Plataforma y **espera la
+  respuesta** (`ack`) antes de leer el siguiente.
+- Plataforma procesa cada código con la misma función que el campo de texto y
+  contesta `{ok, texto}`. La pestaña lo muestra al instante (✔ "INV-000123 · 5
+  europeo + 5 jaula", o ✖ con el motivo) y suena y vibra distinto en acierto y en
+  error.
+- Un mismo código leído varias veces seguidas con la cámara parada encima se
+  ignora durante unos segundos (no se manda dos veces).
+- Contador "N torres añadidas", las últimas 5 lecturas y botón **Terminar**.
+- Mantiene la pantalla encendida (`wakeLock`) si el navegador lo permite.
+- Si en 10 segundos no llega respuesta de Plataforma, muestra "Plataforma no
+  responde: vuelve a ella y reintenta" en vez de seguir leyendo a ciegas.
+- Si el navegador bloquea la pestaña nueva, queda el campo de texto / pistola.
+
+**Riesgo conocido, a verificar en la tablet real:** mientras la pestaña del
+escáner está delante, el navegador puede ralentizar o congelar la pestaña de
+Plataforma. La espera de respuesta hace visible el problema en la propia pantalla
+del escáner, y el modo continuo se valida en el primer uso real. Si no funciona en
+el dispositivo, se recorta a una lectura por pulsación (el modo de Kairos tal cual).
 
 ## Casos límite
 
-- **Dos operarios bipan la misma torre a la vez:** una sola gana (PATCH
-  condicionado); la otra ve "ya cargada".
+- **Dos operarios bipan la misma torre a la vez:** una sola gana (borrado atómico);
+  la otra recibe `NO_EXISTE`.
 - **Torre bipada en el camión equivocado:** quitarla en ese camión (la devuelve) y
   bipar en el correcto.
 - **HODOS caído o sin respuesta:** aviso claro, no se suma nada; lo manual sigue.
-- **Etiqueta de una torre borrada o inexistente:** "No existe esa torre".
+- **Etiqueta de una torre ya cargada, borrada o inexistente:** "No existe esa torre
+  en HODOS (puede estar ya cargada)". Se añade a mano si hace falta.
+- **Fallo entre consumir y guardar:** si HODOS ya borró la torre pero a Plataforma le
+  falla guardar en Firebase (cierre de la pestaña, red), la torre no vuelve a
+  aparecer y el operario la suma a mano. Es la contrapartida directa de no guardar
+  rastro; la ventana es de milisegundos y no se ha considerado motivo para guardar
+  nada en HODOS.
 - **Etiqueta que no es `INV-`:** se rechaza en el cliente sin llamar a HODOS.
-- **Torre editada tras imprimir su etiqueta:** el contenido manda lo guardado en
-  HODOS, no lo impreso. Al editar se avisa de que hay que reimprimir.
-- **Camión finalizado y vuelto a abrir con el mismo flete:** las torres anteriores
-  siguen `CARGADA` en su flete; no se vuelven a ofrecer.
+- **Torre editada tras imprimir su etiqueta:** manda lo guardado en HODOS, no lo
+  impreso. Al editar se avisa de que hay que reimprimir.
 
 ## Pruebas
 
 - **HODOS (`node --test`):** `normalizarLineasTorre_`, formato del id, el HTML de la
   etiqueta (desglose, total, código de barras, escapado de nombres) y el webhook
-  con Supabase simulado: consumo único, doble consumo simultáneo, repetida en el
-  mismo flete, YA_CARGADA, NO_EXISTE, devolver, token inválido. Con mutación sobre
-  el condicional del consumo (si se quita `estado=eq.PRECARGADA`, debe fallar un
-  test).
-- **Plataforma:** no tiene tests automáticos. Se extrae la suma/resta de líneas a
-  una función pura que se prueba con Node, y el resto se comprueba a mano en una
-  **copia de pruebas** (ver orden de despliegue).
+  con Supabase simulado: consumo único, doble consumo simultáneo (el segundo recibe
+  `NO_EXISTE`), `NO_EXISTE`, devolver con contenido válido e inválido, `YA_EXISTE`,
+  token inválido. Con mutación sobre el borrado condicional: si el consumo dejara de
+  usar las filas realmente borradas como criterio, debe fallar un test.
+- **Plataforma:** no tiene tests automáticos. La suma/resta de líneas y la detección
+  de duplicados se extraen a funciones puras que se prueban con Node. El resto se
+  comprueba a mano en la app real (ver orden de despliegue).
 - **Migración:** tras aplicarla, comprobar tabla, secuencia, RLS sin políticas y el
   asesor de seguridad de Supabase.
 
@@ -263,49 +279,58 @@ Nada de producción se toca hasta el paso 2. Cada paso tiene su vuelta atrás.
    `drop table`, `drop function` y `drop sequence` (nada existente depende de
    ellas).
 3. **Desplegar HODOS.** Base = versión de producción actual + solo los archivos
-   propios (el árbol de trabajo tiene cambios sin commitear de otras sesiones que no
-   se deben arrastrar); verificar bajando la versión nueva y comparándola. Las
-   acciones nuevas del webhook quedan inertes hasta que Plataforma las llame; la
-   pestaña nueva solo la ve quien abra el panel. Vuelta atrás: volver a desplegar
-   la versión anterior (`clasp deploy -i <id> -V <anterior>`).
-4. **Copia de pruebas de Plataforma.** Proyecto Apps Script nuevo con el mismo
-   código, que usa **otra ruta de Firebase (`carga_torija_test`)** y **no escribe en
-   `SALIDAS_A` ni envía el email**, para no ensuciar la Torre de Control ni mandar
-   correos reales. Prueba extremo a extremo: crear torre → imprimir → bipar con
-   pistola y con cámara → desaparece de HODOS → quitar → vuelve → borrar → segundo
-   bip "ya cargada". Se prueba también el modo continuo de la cámara en la tablet.
-5. **Plataforma real.** Antes, comprobar que hay permiso de edición sobre el
-   proyecto y listar sus versiones y despliegues. Base = versión de producción
-   actual + solo los cambios propios. **Aviso:** al añadir llamadas a otra app,
-   Plataforma pedirá volver a autorizar permisos una vez (cuenta que la
-   despliega). Hacerlo en un momento sin camiones abiertos. Vuelta atrás: volver
-   a desplegar la versión anterior.
-6. **Primer uso real.** Un camión real con una o dos torres de prueba, con el
-   operario sabiendo que lo manual sigue disponible. Después se documenta.
+   propios (el árbol de trabajo puede tener cambios sin commitear de otras sesiones
+   que no se deben arrastrar); verificar bajando la versión nueva y comparándola.
+   Las acciones nuevas del webhook quedan inertes hasta que Plataforma las llame; la
+   pestaña nueva solo la ve quien abra el panel. Vuelta atrás: volver a desplegar la
+   versión anterior (`clasp deploy -i <id> -V <anterior>`).
+4. **Desplegar Plataforma con el interruptor apagado.** Antes, comprobar que hay
+   permiso de edición sobre el proyecto y listar sus versiones y despliegues. Base =
+   versión de producción actual + solo los cambios propios; verificar bajando la
+   versión nueva. Sin `HODOS_WEBAPP_URL` ni `HODOS_SHARED_TOKEN` configuradas, la
+   app es idéntica a la de hoy para los operarios. **Aviso:** al añadir llamadas a
+   otra app, Plataforma pedirá volver a autorizar permisos una vez (cuenta que la
+   despliega); hacerlo en un momento sin camiones abiertos. Vuelta atrás: volver a
+   desplegar la versión anterior.
+5. **Prueba real, a una hora tranquila.** Configurar las dos propiedades (se
+   enciende el bipado). En Plataforma, abrir un camión con flete `PRUEBA-INV`; en
+   HODOS, crear una torre pequeña de prueba. Recorrido: imprimir la etiqueta →
+   bipar con pistola → bipar con cámara en modo continuo en la tablet → la torre
+   desaparece de HODOS y suma en el camión → quitar la torre (vuelve a HODOS) → bipar
+   otra vez → segundo bip "ya está en este camión" → borrar el camión de prueba.
+   **Nunca pulsar "Finalizar" en el camión de prueba:** escribiría una fila en
+   `SALIDAS_A` y mandaría un correo real. Mientras exista, el flete de prueba se ve
+   en la Torre de Control y en las pantallas de Torija, por eso se hace sin camiones
+   reales en carga. Si algo falla, quitar las propiedades apaga todo al instante.
+6. **Primer camión real** con unas pocas torres y lo manual como respaldo.
 7. **Cierre.** Actualizar `CLAUDE.md` de HODOS, la memoria del proyecto y commit.
 
 ## Riesgos
 
 1. **Migración en producción** (paso 2): aditiva, sin tocar tablas existentes.
-2. **Nueva autorización de permisos en Plataforma** (paso 5): una vez, por la cuenta
+2. **Nueva autorización de permisos en Plataforma** (paso 4): una vez, por la cuenta
    que la despliega.
-3. **Firebase sin autenticación:** la configuración de Plataforma solo lleva la URL
+3. **Prueba en la app real** (paso 5): el camión de prueba es visible un rato para
+   cualquiera que mire Torija; el interruptor y la regla de no finalizar la acotan.
+4. **Torre perdida entre consumir y guardar** (ver casos límite): aceptado al no
+   guardar rastro en HODOS; se corrige sumando a mano.
+5. **Firebase sin autenticación:** la configuración de Plataforma solo lleva la URL
    de la base, sin clave, así que las reglas parecen abiertas. No lo cambia este
    trabajo, pero conviene que el equipo lo sepa.
-4. **Sobrescritura del nodo completo por Plataforma** (`torijaRef.set(...)` desde la
+6. **Sobrescritura del nodo completo por Plataforma** (`torijaRef.set(...)` desde la
    copia local): ya existe hoy y puede pisar cambios entre dos dispositivos que
    editen el mismo camión a la vez. El bipado hereda esa característica; no se
    arregla aquí.
-5. **Edición concurrente del repo de HODOS:** otra sesión tiene cambios sin commitear
-   en `Backend.gs`, `IntegracionIncpc.gs` y `Utilidades.gs`. `doPost` está en
-   `IntegracionIncpc.gs`, así que mi línea nueva se commitea solo con
-   `git add -p` o cuando esa sesión haya terminado.
+7. **Edición concurrente del repo de HODOS:** otras sesiones pueden tener cambios sin
+   commitear en `Backend.gs`, `IntegracionIncpc.gs` o `Utilidades.gs`. `doPost` está
+   en `IntegracionIncpc.gs`, así que mi línea nueva se commitea solo con `git add -p`
+   o cuando esa sesión haya terminado.
+8. **Cámara en modo continuo:** puede no funcionar en la tablet por la gestión de
+   pestañas en segundo plano; se valida en el paso 5 y, si no, se recorta a una
+   lectura por pulsación.
 
-## Decisiones que quedan al revisar este documento
+## Decisiones cerradas el 2026-10-06
 
-1. ¿Conservar siempre las torres cargadas como rastro (propuesto) o purgar pasado un
-   tiempo?
-2. ¿Copia de pruebas de Plataforma (propuesto) o prueba directa en la real a una hora
-   tranquila con un flete "PRUEBA"?
-3. ¿Modo continuo de cámara solo si funciona en la tablet real (propuesto) o
-   empezamos directamente con uno a uno?
+1. Sin rastro en HODOS: cargar una torre es borrarla.
+2. Prueba directamente en la app real de Plataforma.
+3. Modo continuo de la cámara desde el principio.
