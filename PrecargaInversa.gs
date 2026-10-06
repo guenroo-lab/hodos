@@ -236,3 +236,43 @@ function htmlEtiquetasTorresInversa(ids) {
   }).join('\n');
   return envolverEtiquetasHtml_(tarjetas, ESTILO_ETIQUETA_TORRE_INVERSA_);
 }
+
+// ── Webhook para la app de Plataforma ─────────────────────────────────────────────────────
+// doPost (IntegracionIncpc.gs) valida el token compartido y delega aquí estas dos acciones.
+//
+//  consumirTorreInversa {id}            -> borra la torre y devuelve su contenido. El DELETE con
+//                                           return=representation es atómico: si dos bips llegan a
+//                                           la vez, solo uno recibe la fila; el otro, NO_EXISTE.
+//  devolverTorreInversa {id,lineas,creadaEn} -> deshace un consumo recreando la torre con el MISMO
+//                                           id (la etiqueta física sigue siendo válida).
+function procesarAccionInversa_(datos) {
+  var id = validarIdTorreInversa_(datos.id);
+
+  if (datos.accion === 'consumirTorreInversa') {
+    var borradas = supaBorrar_('torres_inversa', 'id_unico=eq.' + encodeURIComponent(id));
+    if (borradas.length === 0) return { ok: false, motivo: 'NO_EXISTE' };
+    var torre = torreDesdeSupabase_(borradas[0]);
+    return { ok: true, id: torre.idUnico, lineas: torre.lineas, total: torre.total, creadaEn: torre.fechaCreacion };
+  }
+
+  if (datos.accion === 'devolverTorreInversa') {
+    var lineas = normalizarLineasTorre_(datos.lineas, obtenerCatalogoInversa());
+    var fila = {
+      id_unico: id,
+      lineas: lineas,
+      total_soportes: totalSoportesTorre_(lineas),
+      creado_por: 'devuelta desde Plataforma'
+    };
+    var creadaEn = fechaIsoONulo_(datos.creadaEn);
+    if (creadaEn) fila.fecha_creacion = creadaEn;
+    try {
+      supaInsertar_('torres_inversa', [fila]);
+    } catch (e) {
+      if (/23505|duplicate key/i.test(String(e && e.message))) return { ok: false, motivo: 'YA_EXISTE' };
+      throw e;
+    }
+    return { ok: true, id: id };
+  }
+
+  throw new Error('Acción de inversa desconocida: ' + datos.accion);
+}

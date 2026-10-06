@@ -39,6 +39,10 @@ function doPost(e) {
       respuesta = { ok: true, html: htmlEtiquetasPreparacionPorIds_(datos.idsUnicos) };
     } else if (datos.accion === 'marcarImpresasPreparacion') {
       respuesta = { ok: true, resultado: marcarImpresasPreparacionPorIds_(datos.idsUnicos) };
+    // Precarga Inversa (2026-10-06): la app de Plataforma consume/devuelve torres al
+    // bipar su etiqueta en el camión de Torija. Ver PrecargaInversa.gs.
+    } else if (datos.accion === 'consumirTorreInversa' || datos.accion === 'devolverTorreInversa') {
+      respuesta = procesarAccionInversa_(datos);
     } else {
       var idUnico = crearEtiquetaDesdeIncpc_(datos);
       respuesta = { ok: true, idUnico: idUnico };
