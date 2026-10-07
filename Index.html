@@ -183,6 +183,13 @@
     .inversa-chip strong { color:var(--color-accent-text); }
     .inversa-desglose { font-size:13px; }
     .inversa-acciones { display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap; }
+    .inversa-plantillas { margin:0 0 18px; padding:12px; border:1px dashed var(--input-border); border-radius:10px; background:var(--bg-panel); }
+    .inversa-plantillas-titulo { font-size:12px; text-transform:uppercase; letter-spacing:0.5px; font-weight:700; color:var(--color-accent-text); margin-bottom:8px; }
+    .inversa-plantillas-botones { display:flex; flex-wrap:wrap; gap:8px; }
+    .inversa-plantilla { flex:1 1 200px; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:3px; text-align:left; padding:10px 12px; border:1px solid var(--input-border); border-radius:8px; background:var(--input-bg); color:var(--text-primary); font:inherit; cursor:pointer; }
+    .inversa-plantilla strong { font-size:14px; }
+    .inversa-plantilla span { font-size:12.5px; opacity:0.8; overflow-wrap:anywhere; }
+    .inversa-plantilla.activa { border-color:var(--color-accent); box-shadow:0 0 0 1px var(--color-accent) inset; }
     /* En una pantalla estrecha no caben en una línea la foto, el nombre y los botones de cantidad
        (el nombre quedaba aplastado): la fila se apila, foto+nombre arriba y la cantidad debajo. */
     @media (max-width:520px) {
@@ -834,6 +841,11 @@
       <div class="section" id="inversaFormulario">
         <h2 id="inversaTituloForm">Nueva torre</h2>
         <p class="hint-texto">Indica cuántos soportes de cada tipo lleva la torre. Las casillas vacías no cuentan.</p>
+        <div class="inversa-plantillas vista-oculta" id="inversaPlantillas">
+          <div class="inversa-plantillas-titulo">Torres predeterminadas</div>
+          <div class="inversa-plantillas-botones" id="inversaPlantillasBotones"></div>
+          <p class="hint-texto" style="margin:8px 0 0;">Rellenan el formulario con una torre tipo; puedes cambiar las cantidades antes de crearla.</p>
+        </div>
         <div id="inversaCatalogo"><p class="cargando-resultados">Cargando catálogo…</p></div>
         <div class="inversa-resumen-form">Total de la torre: <strong id="inversaTotalForm">0</strong> soportes</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
@@ -1466,6 +1478,79 @@
   var formularioInversaPintado_ = false;
   var torreEnEdicionInversa_ = null;   // idUnico de la torre que se edita, o null
   var torresInversa_ = [];             // última lista recibida del servidor
+  var plantillasInversa_ = [];         // torres predeterminadas [{clave, titulo, detalle, lineas, total}]
+
+  // ── Torres predeterminadas: botones que rellenan el formulario con una torre tipo ──
+  function pintarPlantillasInversa_() {
+    var panel = document.getElementById('inversaPlantillas');
+    panel.classList.toggle('vista-oculta', plantillasInversa_.length === 0);
+    document.getElementById('inversaPlantillasBotones').innerHTML = plantillasInversa_.map(function (p) {
+      return '<button type="button" class="inversa-plantilla" data-clave="' + escapeHtml_(p.clave) + '" aria-pressed="false">' +
+        '<strong>' + escapeHtml_(p.titulo) + '</strong><span>' + escapeHtml_(p.detalle) + '</span></button>';
+    }).join('');
+    marcarPlantillaActivaInversa_();
+  }
+
+  // Sin bloquear la pestaña: si no cargan, el formulario sigue funcionando como siempre.
+  function cargarPlantillasInversa_() {
+    if (plantillasInversa_.length) return;
+    gas('obtenerTorresPredeterminadasInversa').then(function (plantillas) {
+      plantillasInversa_ = plantillas || [];
+      pintarPlantillasInversa_();
+    }).catch(function (err) {
+      console.error('No se pudieron cargar las torres predeterminadas:', err);
+    });
+  }
+
+  // ¿Lo que hay ahora en el formulario es exactamente esta torre? (mismos tipos y cantidades)
+  function plantillaCoincideInversa_(p) {
+    var actuales = {};
+    var tipos = 0;
+    leerLineasFormularioInversa_().forEach(function (l) {
+      var c = Number(l.cantidad);
+      if (isFinite(c) && c > 0) { actuales[l.id] = (actuales[l.id] || 0) + c; tipos++; }
+    });
+    if (tipos !== p.lineas.length) return false;
+    return p.lineas.every(function (l) { return actuales[l.id] === l.cantidad; });
+  }
+
+  function plantillaActivaInversa_() {
+    for (var i = 0; i < plantillasInversa_.length; i++) {
+      if (plantillaCoincideInversa_(plantillasInversa_[i])) return plantillasInversa_[i];
+    }
+    return null;
+  }
+
+  function marcarPlantillaActivaInversa_() {
+    var activa = plantillaActivaInversa_();
+    document.querySelectorAll('#inversaPlantillasBotones .inversa-plantilla').forEach(function (b) {
+      var esta = !!activa && b.getAttribute('data-clave') === activa.clave;
+      b.classList.toggle('activa', esta);
+      b.setAttribute('aria-pressed', esta ? 'true' : 'false');
+    });
+  }
+
+  // Sustituye las cantidades del formulario por las de la torre elegida y lleva la vista al botón de crear
+  // (el catálogo es largo y el botón queda muy abajo, sobre todo en el móvil).
+  function aplicarPlantillaInversa_(clave) {
+    var p = plantillasInversa_.filter(function (x) { return x.clave === clave; })[0];
+    if (!p) return;
+    var sinCasilla = p.lineas.filter(function (l) { return !buscarInputInversa_(l.id); });
+    if (sinCasilla.length) {
+      mostrarModalAviso_('Torre no disponible', 'El formulario no tiene casilla para ' + sinCasilla.map(function (l) { return l.nombre; }).join(', ') + '. Recarga la página e inténtalo de nuevo.');
+      return;
+    }
+    document.querySelectorAll('#inversaCatalogo input[data-id]').forEach(function (inp) { inp.value = ''; });
+    p.lineas.forEach(function (l) { buscarInputInversa_(l.id).value = String(l.cantidad); });
+    recalcularTotalInversa_();
+    var boton = document.getElementById('btnInversaGuardar');
+    if (boton && boton.scrollIntoView) boton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  document.getElementById('inversaPlantillasBotones').addEventListener('click', function (ev) {
+    var b = ev.target.closest('.inversa-plantilla');
+    if (b) aplicarPlantillaInversa_(b.getAttribute('data-clave'));
+  });
 
   function agruparCatalogoInversa_(catalogo) {
     var grupos = [];
@@ -1571,6 +1656,7 @@
       inp.closest('.inversa-fila').classList.toggle('con-cantidad', cuenta);
     });
     document.getElementById('inversaTotalForm').textContent = String(total);
+    marcarPlantillaActivaInversa_();
   }
 
   function pasoInversa_(id, delta) {
@@ -1601,6 +1687,7 @@
 
   function cargarPestanaInversa_() {
     pintarFormularioInversa_().then(function () {
+      cargarPlantillasInversa_();
       cargarTorresInversa_();
     }).catch(function (err) {
       document.getElementById('inversaCatalogo').innerHTML =
@@ -1692,6 +1779,7 @@
     }
     var btn = document.getElementById('btnInversaGuardar');
     var editando = torreEnEdicionInversa_;
+    var eraPlantilla = !!plantillaActivaInversa_();
     btn.disabled = true;
     function terminar() { btn.disabled = false; }
     if (editando) {
@@ -1710,6 +1798,8 @@
       gas('crearTorreInversa', lineas).then(function (torre) {
         limpiarFormularioInversa_();
         cargarTorresInversa_();
+        // Venía de un botón de torre predeterminada: se vuelve arriba para poder crear la siguiente.
+        if (eraPlantilla) document.getElementById('inversaFormulario').scrollIntoView({ behavior: 'smooth', block: 'start' });
         return gas('htmlEtiquetasTorresInversa', [torre.idUnico]);
       }).catch(function (err) {
         mostrarModalAviso_('No se pudo crear la torre', err && err.message ? err.message : String(err));

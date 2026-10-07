@@ -334,3 +334,15 @@ Nada de producción se toca hasta el paso 2. Cada paso tiene su vuelta atrás.
 1. Sin rastro en HODOS: cargar una torre es borrarla.
 2. Prueba directamente en la app real de Plataforma.
 3. Modo continuo de la cámara desde el principio.
+
+## Torres predeterminadas (añadido el 2026-10-07)
+
+Petición del usuario: botones que creen rápido las torres que se repiten siempre — torre de palets Euro (17), torre de paletinas (17) y torre SVP (5 palets euro, 10 laterales y 35 barras) — y que al cargar en Plataforma las cantidades se sumen.
+
+**Cómo se meten.** Plataforma suma al bipar por el **id del tipo** de la pantalla de Torija, y esa pantalla no tiene las piezas sueltas del SVP (`S18_L`, `S18_B`; HODOS tampoco las ofrece). Por eso la torre SVP **no** se define como «5 palets + 10 laterales + 35 barras», sino como **5 × `S18` «SVP (Completo)»**: al escribir `SALIDAS_A`, Plataforma despieza cada SVP completo en 1 palet europeo + 2 laterales + 7 barras (`Backend_Inversa.js`), que da exactamente 5 + 10 + 35. Las otras dos son `S01` EUROPEO × 17 y `S02` PALETINA × 17. Las torres se suman con cualquier otra cosa cargada a mano o bipada, porque son líneas normales por id.
+
+**Qué hace el botón.** Un bloque «Torres predeterminadas» encima del formulario con un botón por torre (nombre y contenido; la SVP enseña el despiece). Pulsarlo **rellena el formulario** con esa torre (sustituye lo que hubiera), marca el botón como activo mientras las cantidades coincidan, y lleva la vista al botón «Crear e imprimir etiqueta» (en el móvil queda muy abajo). No crea nada por sí solo: se puede ajustar una cantidad antes de crear. Tras crear una torre que venía de un botón, la vista vuelve arriba para hacer la siguiente. Funciona también al editar una torre existente (solo cambia el formulario hasta pulsar «Guardar cambios»).
+
+**Dónde vive.** `TORRES_PREDETERMINADAS_INVERSA_` en `PrecargaInversa.gs` (`torresPredeterminadasInversa_(catalogo)` y `obtenerTorresPredeterminadasInversa()`): una plantilla cuyo tipo no esté en el catálogo no se ofrece, y el nombre sale siempre del catálogo. Para cambiar una cantidad o añadir una torre hay que editar esa constante. Si las plantillas no cargan, el formulario sigue funcionando como siempre.
+
+**Pruebas.** `test/precargaInversaPlantillas.test.js` (8, con las filas reales del catálogo, incluido que ninguna plantilla usa piezas sueltas) y 12 escenarios de la pestaña en Chrome con servidor simulado; 18 mutaciones detectadas.

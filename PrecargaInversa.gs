@@ -82,6 +82,42 @@ function resumenPorTipoTorres_(torres) {
   return Object.keys(porId).sort().map(function (id) { return porId[id]; });
 }
 
+// ── Torres predeterminadas ────────────────────────────────────────────────────────────────
+// Botones del formulario que lo rellenan con una torre tipo (se puede ajustar antes de crearla).
+// IMPORTANTE: solo valen ids del catálogo que HODOS ofrece, los mismos que tiene la pantalla de
+// Torija de Plataforma: así al bipar la torre se SUMAN a lo cargado. Por eso la torre SVP no se
+// define como «5 palets + 10 laterales + 35 barras» (S18_L/S18_B no existen en esa pantalla y no
+// se sumarían) sino como 5 × S18 «SVP (Completo)»: Plataforma despieza cada SVP completo en
+// 1 palet europeo + 2 laterales + 7 barras al escribir SALIDAS_A (Backend_Inversa.js).
+var TORRES_PREDETERMINADAS_INVERSA_ = [
+  { clave: 'euro-17', titulo: 'Torre palet Euro', lineas: [{ id: 'S01', cantidad: 17 }] },
+  { clave: 'paletina-17', titulo: 'Torre paletinas', lineas: [{ id: 'S02', cantidad: 17 }] },
+  { clave: 'svp-5', titulo: 'Torre SVP', lineas: [{ id: 'S18', cantidad: 5 }], despiecePorUnidad: { palets: 1, laterales: 2, barras: 7 } }
+];
+
+function detalleTorrePredeterminada_(plantilla, lineas) {
+  var texto = lineas.map(function (l) { return l.cantidad + ' × ' + l.nombre; }).join(' + ');
+  var d = plantilla.despiecePorUnidad;
+  if (d) {
+    var n = lineas[0].cantidad;
+    texto += ' = ' + (n * d.palets) + ' palets euro + ' + (n * d.laterales) + ' laterales + ' + (n * d.barras) + ' barras';
+  }
+  return texto;
+}
+
+// catalogo: lo que devuelve obtenerCatalogoInversa. Una plantilla cuyo tipo no está en el catálogo
+// (Plataforma lo quitó o cambió su id) no se ofrece; el nombre sale siempre del catálogo.
+function torresPredeterminadasInversa_(catalogo) {
+  var porId = {};
+  catalogo.forEach(function (c) { porId[c.id] = c; });
+  return TORRES_PREDETERMINADAS_INVERSA_.filter(function (p) {
+    return p.lineas.every(function (l) { return porId[l.id]; });
+  }).map(function (p) {
+    var lineas = p.lineas.map(function (l) { return { id: l.id, nombre: porId[l.id].nombre, cantidad: l.cantidad }; });
+    return { clave: p.clave, titulo: p.titulo, detalle: detalleTorrePredeterminada_(p, lineas), lineas: lineas, total: totalSoportesTorre_(lineas) };
+  });
+}
+
 function fechaIsoONulo_(valor) {
   if (!valor) return null;
   var d = new Date(valor);
@@ -118,6 +154,11 @@ function obtenerCatalogoInversa() {
     // Sin caché solo se pierde velocidad.
   }
   return catalogo;
+}
+
+// Para los botones de torres predeterminadas del formulario (comparten la caché del catálogo).
+function obtenerTorresPredeterminadasInversa() {
+  return torresPredeterminadasInversa_(obtenerCatalogoInversa());
 }
 
 // Para forzar la relectura si el equipo de Plataforma añade un tipo nuevo (se ejecuta a mano
