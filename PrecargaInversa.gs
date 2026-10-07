@@ -263,14 +263,37 @@ function obtenerFotosCatalogoInversa(idsFoto) {
 // ── Datos de torres (tabla public.torres_inversa) ─────────────────────────────────────────
 // Una fila existe SOLO mientras la torre está pendiente: cargarla es borrarla.
 
+// etiqueta_impresa_en (migración 2026-10-07): cuándo se imprimió la etiqueta de la torre; null = todavía
+// sin imprimir (se puede crear una torre y sacar las etiquetas después, todas juntas o por selección).
 function torreDesdeSupabase_(f) {
   return {
     idUnico: f.id_unico,
     lineas: f.lineas,
     total: f.total_soportes,
     creadoPor: f.creado_por,
-    fechaCreacion: f.fecha_creacion
+    fechaCreacion: f.fecha_creacion,
+    impresaEn: f.etiqueta_impresa_en || null
   };
+}
+
+var MAX_TORRES_POR_LOTE_INVERSA_ = 200;
+var TROZO_IDS_TORRES_INVERSA_ = 30; // UrlFetchApp rechaza URLs de más de ~2 KB
+
+// Lista de ids de torre → ids válidos, sin repetidos y en el orden dado.
+function validarIdsTorresInversa_(ids, mensajeVacio) {
+  if (!Array.isArray(ids) || ids.length === 0) throw new Error(mensajeVacio || 'Faltan las torres');
+  if (ids.length > MAX_TORRES_POR_LOTE_INVERSA_) {
+    throw new Error('Demasiadas torres de golpe (máximo ' + MAX_TORRES_POR_LOTE_INVERSA_ + ')');
+  }
+  var unicos = [];
+  ids.map(validarIdTorreInversa_).forEach(function (id) { if (unicos.indexOf(id) === -1) unicos.push(id); });
+  return unicos;
+}
+
+function trozosDeIdsInversa_(ids) {
+  var trozos = [];
+  for (var i = 0; i < ids.length; i += TROZO_IDS_TORRES_INVERSA_) trozos.push(ids.slice(i, i + TROZO_IDS_TORRES_INVERSA_));
+  return trozos;
 }
 
 function crearTorreInversa(lineas) {
@@ -296,12 +319,26 @@ function listarTorresInversa() {
 function actualizarTorreInversa(idUnico, lineas) {
   var id = validarIdTorreInversa_(idUnico);
   var limpias = normalizarLineasTorre_(lineas, obtenerCatalogoInversa());
+  // Cambiar el contenido deja desfasada la etiqueta que ya estuviera impresa: vuelve a «sin imprimir».
   var filas = supaActualizar_('torres_inversa', 'id_unico=eq.' + encodeURIComponent(id), {
     lineas: limpias,
-    total_soportes: totalSoportesTorre_(limpias)
+    total_soportes: totalSoportesTorre_(limpias),
+    etiqueta_impresa_en: null
   });
   if (filas.length === 0) throw new Error('Esa torre ya no existe (puede que ya se haya cargado en un camión)');
   return torreDesdeSupabase_(filas[0]);
+}
+
+// Se llama al sacar las etiquetas (de una, varias o todas): apunta cuándo, para saber cuáles faltan.
+function marcarTorresInversaImpresas(ids) {
+  var limpios = validarIdsTorresInversa_(ids);
+  var ahora = new Date().toISOString();
+  var marcadas = 0;
+  trozosDeIdsInversa_(limpios).forEach(function (trozo) {
+    var filas = supaActualizar_('torres_inversa', 'id_unico=in.(' + trozo.map(encodeURIComponent).join(',') + ')', { etiqueta_impresa_en: ahora });
+    marcadas += filas.length;
+  });
+  return { marcadas: marcadas };
 }
 
 function borrarTorreInversa(idUnico) {
@@ -360,9 +397,13 @@ function htmlUnaTorreInversa_(torre, fechaTxt) {
 }
 
 function htmlEtiquetasTorresInversa(ids) {
-  if (!Array.isArray(ids) || ids.length === 0) throw new Error('Faltan las torres a imprimir');
-  var limpios = ids.map(validarIdTorreInversa_);
-  var filas = supaGet_('torres_inversa', 'id_unico=in.(' + limpios.map(encodeURIComponent).join(',') + ')&order=id_unico.asc');
+  var limpios = validarIdsTorresInversa_(ids, 'Faltan las torres a imprimir');
+  var filas = [];
+  trozosDeIdsInversa_(limpios).forEach(function (trozo) {
+    supaGet_('torres_inversa', 'id_unico=in.(' + trozo.map(encodeURIComponent).join(',') + ')&order=id_unico.asc')
+      .forEach(function (f) { filas.push(f); });
+  });
+  filas.sort(function (a, b) { return a.id_unico < b.id_unico ? -1 : a.id_unico > b.id_unico ? 1 : 0; });
   if (filas.length === 0) throw new Error('Esas torres ya no existen (puede que ya se hayan cargado en un camión)');
   var tarjetas = filas.map(function (f) {
     var torre = torreDesdeSupabase_(f);
@@ -396,7 +437,9 @@ function procesarAccionInversa_(datos) {
       id_unico: id,
       lineas: lineas,
       total_soportes: totalSoportesTorre_(lineas),
-      creado_por: 'devuelta desde Plataforma'
+      creado_por: 'devuelta desde Plataforma',
+      // La etiqueta física de esa torre ya existe (se bipó): vuelve como impresa, no como «sin imprimir».
+      etiqueta_impresa_en: new Date().toISOString()
     };
     var creadaEn = fechaIsoONulo_(datos.creadaEn);
     if (creadaEn) fila.fecha_creacion = creadaEn;

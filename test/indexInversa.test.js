@@ -26,6 +26,17 @@ test('Index.html: botón de la barra lateral, insignia y vista de la Precarga In
   });
 });
 
+test('Index.html: crear torre sin etiqueta y barra para imprimir después (todas, las sin imprimir o una selección)', () => {
+  ['btnInversaCrearImprimir', 'inversaEstado', 'inversaBarraImpresion', 'inversaSelTodas', 'btnInversaImprimirSel', 'btnInversaImprimirPend'].forEach((id) => {
+    assert.ok(html.indexOf('id="' + id + '"') !== -1, 'falta id=' + id);
+  });
+  assert.match(html, /id="btnInversaGuardar" onclick="guardarTorreUI_\(false\)"/, '«Crear torre» no imprime');
+  assert.match(html, /id="btnInversaCrearImprimir" onclick="guardarTorreUI_\(true\)"/, '«Crear e imprimir etiqueta» sí');
+  const codigo = bloqueInversa();
+  assert.match(codigo, /gas\('marcarTorresInversaImpresas', ids\)/);
+  assert.match(codigo, /gas\('htmlEtiquetasTorresInversa', ids\)/);
+});
+
 test('cambiarPestana: muestra/oculta la vista inversa y carga sus datos', () => {
   assert.match(html, /getElementById\('vistaInversa'\)\.classList\.toggle\('vista-oculta', nombre !== 'inversa'\)/);
   assert.match(html, /if \(nombre === 'inversa'\) \{ cargarPestanaInversa_\(\); \}/);

@@ -346,3 +346,19 @@ Petición del usuario: botones que creen rápido las torres que se repiten siemp
 **Dónde vive.** `TORRES_PREDETERMINADAS_INVERSA_` en `PrecargaInversa.gs` (`torresPredeterminadasInversa_(catalogo)` y `obtenerTorresPredeterminadasInversa()`): una plantilla cuyo tipo no esté en el catálogo no se ofrece, y el nombre sale siempre del catálogo. Para cambiar una cantidad o añadir una torre hay que editar esa constante. Si las plantillas no cargan, el formulario sigue funcionando como siempre.
 
 **Pruebas.** `test/precargaInversaPlantillas.test.js` (8, con las filas reales del catálogo, incluido que ninguna plantilla usa piezas sueltas) y 12 escenarios de la pestaña en Chrome con servidor simulado; 18 mutaciones detectadas.
+
+## Crear torres sin sacar la etiqueta (añadido el 2026-10-07)
+
+Petición del usuario: poder ir añadiendo torres seguidas sin que cada una abra la impresión, y sacar las etiquetas después — todas juntas, las que faltan o una selección.
+
+**Formulario.** Dos botones: «Crear torre» (principal; la añade a la lista sin etiqueta) y «Crear e imprimir etiqueta» (como antes). Bajo ellos queda un mensaje fijo con la última torre creada («✓ INV-000015 creada (5 × SVP (Completo)). Queda pendiente de imprimir.»), sin ventanas que interrumpan. Editando una torre solo hay «Guardar cambios» y «Cancelar edición».
+
+**Lista «Torres precargadas».** Casilla por torre, «Seleccionar todas» (con estado intermedio), y dos botones: «Imprimir seleccionadas (n)» e «Imprimir las sin imprimir (m)». Cada torre muestra la insignia «Sin imprimir» o «Etiqueta impresa <fecha>»; el botón de fila es «Imprimir» si nunca se imprimió y «Reimprimir» si sí. El encabezado cuenta «12 pendientes · 5 sin imprimir». La selección se descarta sola para torres que ya no están (cargadas o borradas) y tras imprimir.
+
+**Dato.** Columna nueva `public.torres_inversa.etiqueta_impresa_en timestamptz` (null = sin imprimir), migración `docs/migraciones/2026-10-07-torres-inversa-etiqueta-impresa.sql` (solo añade la columna; las torres existentes quedan como impresas, porque hasta hoy toda torre se creaba imprimiendo). Reglas: crear no la rellena; imprimir (`marcarTorresInversaImpresas`) la rellena con la hora, también al reimprimir; **editar el contenido la vuelve a null** (la etiqueta vieja ya no coincide); una torre que Plataforma devuelve con «Quitar» (`devolverTorreInversa`) vuelve **como impresa** (su etiqueta física existe). Consumir (bipar) borra la fila como siempre: no queda rastro.
+
+**Servidor.** `htmlEtiquetasTorresInversa` y `marcarTorresInversaImpresas` aceptan hasta 200 torres y trabajan en lotes de 30 (UrlFetchApp no admite URLs de más de ~2 KB); las etiquetas salen ordenadas por id. La impresión sigue abriendo la ventana dentro del clic (para que el navegador no la bloquee) y apunta la fecha después; si apuntarla fallara, la etiqueta ya salió y solo se vería «sin imprimir».
+
+**Orden de despliegue.** Primero la migración (la versión anterior de HODOS sigue funcionando con la columna puesta) y después HODOS. Con HODOS nuevo y sin columna, la lista saldría toda «sin imprimir» y marcar fallaría.
+
+**Pruebas.** `test/precargaInversaImpresion.test.js` (9) y 24 escenarios de la pestaña en Chrome con servidor simulado con estado (crear sin etiqueta, crear e imprimir, varias seguidas + imprimir las pendientes, selección, seleccionar todas, imprimir una, reimprimir, editar una impresa, fallos al marcar/generar/crear, selección que se poda, sin torres); 28 mutaciones detectadas.
