@@ -74,7 +74,7 @@ function crearEntorno(extra) {
     TIENDA_SLUG_: { 'Málaga': 'malaga', 'Marbella': 'marbella', 'Mijas': 'mijas', 'Granada': 'granada' },
     fechaComoValorInput_: () => '2026-10-15',
     mostrarModalAviso_: (titulo, texto) => avisos.push({ titulo, texto }),
-    mostrarConfirmacion_: (mensaje, alConfirmar, titulo, boton) => confirmaciones.push({ mensaje, alConfirmar, titulo, boton }),
+    mostrarConfirmacion_: (mensaje, alConfirmar, titulo, boton, peligro) => confirmaciones.push({ mensaje, alConfirmar, titulo, boton, peligro }),
     marcarTiendaCamionSeleccionada_: (t) => { ctx.camionDestinoSeleccionado = t; },
     poblarHorarios_: () => Promise.resolve([]),
     marcarChipSeleccionado_: () => {},
@@ -87,6 +87,8 @@ function crearEntorno(extra) {
   vm.runInContext(funcionReal('escapeHtml_'), ctx);
   if (extra && extra.escapeHtml_) ctx.escapeHtml_ = extra.escapeHtml_;
   vm.runInContext(bloqueCargas(), ctx);
+  // Como en el HTML de la página: las secciones plegables y sus barras empiezan escondidas.
+  ['camionSeccionCerradas', 'camionSeccionRevisar', 'btnSeccionCerradas', 'btnSeccionRevisar'].forEach((id) => entorno.el(id).classList.add('vista-oculta'));
   entorno.ctx = ctx;
   return entorno;
 }
@@ -102,7 +104,8 @@ function formularioListo(e, cargadores) {
 // ───────────────────────── estructura de la página ─────────────────────────
 
 test('Index.html: panel de cargas activas, selector de cargador y botones para volver', () => {
-  ['camionPanel', 'camionPanelLista', 'camionPanelContador', 'btnPanelActualizar', 'camionContextoAviso', 'camionCargadorGrupo',
+  ['camionPanel', 'camionPanelLista', 'camionPanelContador', 'btnPanelActualizar', 'btnSeccionCerradas', 'btnSeccionRevisar', 'camionSeccionCerradas',
+    'camionSeccionRevisar', 'camionListaCerradas', 'camionListaRevisar', 'nCerradas', 'nRevisar', 'camionContextoAviso', 'camionCargadorGrupo',
     'camionCargadorChips', 'camionCargadorAux', 'btnCargadorMas', 'camionCargadorResumen', 'btnAbrirCarga',
     'camionCargadorLinea', 'camionAvisoReapertura', 'btnVolverInicio'].forEach((id) => {
     assert.ok(html.indexOf('id="' + id + '"') !== -1, 'falta id=' + id);
@@ -238,19 +241,30 @@ test('textoCifrasCarga_: singular y plural, y los palets SIE solo si los hay', (
   assert.strictEqual(e.ctx.textoCifrasCarga_({ soportes: 22, palets: 6 }), '22 soportes · 6 palets SIE');
 });
 
-test('estadoVisualCarga_: abierta, abierta que ya pasó su hora y cerrada reabrible', () => {
-  const e = crearEntorno();
-  assert.deepStrictEqual(aLocal(e.ctx.estadoVisualCarga_({ estado: 'ABIERTA', vencida: false })), { clase: 'est-abierta', texto: 'ABIERTA', accion: 'Continuar ›' });
-  assert.deepStrictEqual(aLocal(e.ctx.estadoVisualCarga_({ estado: 'ABIERTA', vencida: true })), { clase: 'est-vencida', texto: 'ABIERTA · PASÓ SU HORA', accion: 'Continuar ›' });
-  assert.deepStrictEqual(aLocal(e.ctx.estadoVisualCarga_({ estado: 'CERRADA' })), { clase: 'est-cerrada', texto: 'CERRADA', accion: 'Reabrir ›' });
-});
+const CARGA = { idCarga: 'CARGA-000638', destino: 'Marbella', fechaEntrega: '2026-10-15', horario: '22:00', estado: 'ABIERTA', cargador: 'Juanlu, Sebas', soportes: 10, palets: 0, vacia: false, yaLlego: false, reabrible: false, reabierta: false };
+const CERRADA = Object.assign({}, CARGA, { idCarga: 'CARGA-000631', horario: '19:00', estado: 'CERRADA', soportes: 6, palets: 13, reabrible: true });
+const CERRADA_LLEGO = Object.assign({}, CERRADA, { idCarga: 'CARGA-000600', horario: '07:00', yaLlego: true, reabrible: false });
+const REVISAR_LLEGO_CON = Object.assign({}, CARGA, { idCarga: 'CARGA-000610', destino: 'Málaga', horario: '6:00', motivo: 'LLEGO', principal: '', soportes: 4 });
+const REVISAR_LLEGO_VACIA = Object.assign({}, REVISAR_LLEGO_CON, { idCarga: 'CARGA-000630', soportes: 0, vacia: true });
+const REPETIDA = Object.assign({}, CARGA, { idCarga: 'CARGA-000636', horario: '19:00', motivo: 'REPETIDA', principal: 'CARGA-000631', soportes: 0, vacia: true });
+const REPETIDA_CON = Object.assign({}, REPETIDA, { idCarga: 'CARGA-000650', motivo: 'REPETIDA_CON_MERCANCIA', soportes: 2, vacia: false });
+const TRES_LISTAS = (a, c, r) => ({ abiertas: a || [], cerradas: c || [], porRevisar: r || [] });
 
-const CARGA = { idCarga: 'CARGA-000638', destino: 'Marbella', fechaEntrega: '2026-10-15', horario: '22:00', estado: 'ABIERTA', cargador: 'Juanlu, Sebas', soportes: 10, palets: 0, vencida: false, reabierta: false };
+test('estadoVisualCarga_: abierta, cerrada (también la que ya llegó) y los tres motivos de «por revisar»', () => {
+  const e = crearEntorno();
+  const ev = (c) => aLocal(e.ctx.estadoVisualCarga_(c));
+  assert.deepStrictEqual(ev(CARGA), { clase: 'est-abierta', texto: 'ABIERTA' });
+  assert.deepStrictEqual(ev(CERRADA), { clase: 'est-cerrada', texto: 'CERRADA' });
+  assert.deepStrictEqual(ev(CERRADA_LLEGO), { clase: 'est-cerrada', texto: 'CERRADA · YA LLEGÓ' });
+  assert.deepStrictEqual(ev(REVISAR_LLEGO_CON), { clase: 'est-vencida', texto: 'ABIERTA · LLEGÓ EL CAMIÓN' });
+  assert.deepStrictEqual(ev(REPETIDA), { clase: 'est-vencida', texto: 'REPETIDA · VACÍA' });
+  assert.deepStrictEqual(ev(REPETIDA_CON), { clase: 'est-vencida', texto: 'REPETIDA · CON MERCANCÍA' });
+});
 
 test('tarjetaCargaHtml_: lleva tienda, hora, día, estado, cifras, cargador, id y los datos para rellenar el formulario', () => {
   const e = crearEntorno();
   const t = e.ctx.tarjetaCargaHtml_(CARGA, '2026-10-15');
-  assert.match(t, /class="carga-card tienda-marbella"/);
+  assert.match(t, /^<button type="button" class="carga-card tienda-marbella"/);
   assert.match(t, /data-destino="Marbella" data-fecha="2026-10-15" data-horario="22:00"/);
   assert.match(t, /carga-card-hora">22:00</);
   assert.match(t, /carga-card-dia">Hoy</);
@@ -261,40 +275,141 @@ test('tarjetaCargaHtml_: lleva tienda, hora, día, estado, cifras, cargador, id 
   assert.match(t, /Continuar ›/);
 });
 
-test('tarjetaCargaHtml_: reabierta, sin cargador y cerrada se distinguen', () => {
+test('tarjetaCargaHtml_: reabierta, sin cargador y cerrada reabrible se distinguen', () => {
   const e = crearEntorno();
   const reabierta = e.ctx.tarjetaCargaHtml_(Object.assign({}, CARGA, { reabierta: true }), '2026-10-15');
   assert.match(reabierta, /ABIERTA · REABIERTA/);
   const sinCargador = e.ctx.tarjetaCargaHtml_(Object.assign({}, CARGA, { cargador: '' }), '2026-10-15');
   assert.match(sinCargador, /Sin cargador anotado/);
-  const cerrada = e.ctx.tarjetaCargaHtml_(Object.assign({}, CARGA, { estado: 'CERRADA', palets: 3 }), '2026-10-15');
+  const cerrada = e.ctx.tarjetaCargaHtml_(CERRADA, '2026-10-15');
   assert.match(cerrada, /est-cerrada">CERRADA/);
-  assert.match(cerrada, /3 palets SIE/);
+  assert.match(cerrada, /13 palets SIE/);
   assert.match(cerrada, /Reabrir ›/);
 });
 
-test('tarjetaCargaHtml_ escapa todos los datos que vienen de la base (no se cuela HTML)', () => {
+test('tarjetaConsultaHtml_: la cerrada que ya llegó es solo consulta: sin botón, sin datos de camión y apagada', () => {
   const e = crearEntorno();
-  const mala = '"><img src=x onerror=alert(1)>';
-  const t = e.ctx.tarjetaCargaHtml_(Object.assign({}, CARGA, { destino: mala, horario: mala, cargador: mala, idCarga: mala, fechaEntrega: '2026-10-15' }), '2026-10-15');
-  assert.ok(!/<img/.test(t), 'no debe quedar ninguna etiqueta img sin escapar');
+  const t = e.ctx.tarjetaConsultaHtml_(CERRADA_LLEGO, '2026-10-15');
+  assert.match(t, /^<div class="carga-card carga-card-consulta tienda-marbella"/);
+  assert.ok(!/<button/.test(t) && !/data-destino/.test(t), 'no se puede pulsar');
+  assert.match(t, /CERRADA · YA LLEGÓ/);
+  assert.match(t, /Solo consulta/);
+  assert.match(t, /6 soportes · 13 palets SIE/);
 });
 
-test('pintarPanelCargas_: cuenta las abiertas, pinta las tarjetas y avisa cuando no hay ninguna', () => {
+test('tarjetaCargaHtml_, tarjetaConsultaHtml_ y tarjetaRevisarHtml_ escapan todos los datos que vienen de la base (no se cuela HTML)', () => {
   const e = crearEntorno();
-  e.ctx.pintarPanelCargas_([CARGA, Object.assign({}, CARGA, { idCarga: 'CARGA-000639', estado: 'CERRADA' })]);
+  const mala = '"><img src=x onerror=alert(1)>';
+  const sucia = Object.assign({}, REPETIDA, { destino: mala, horario: mala, cargador: mala, idCarga: mala, principal: mala });
+  [e.ctx.tarjetaCargaHtml_(sucia, '2026-10-15'), e.ctx.tarjetaConsultaHtml_(sucia, '2026-10-15'), e.ctx.tarjetaRevisarHtml_(sucia, '2026-10-15')].forEach((t) => {
+    assert.ok(!/<img/.test(t), 'no debe quedar ninguna etiqueta img sin escapar');
+  });
+});
+
+test('accionesRevisar_: con mercancía y llegó = cerrarla; vacía (llegó o repetida) = descartarla; repetida con mercancía = nada', () => {
+  const e = crearEntorno();
+  const ac = (c) => aLocal(e.ctx.accionesRevisar_(c));
+  assert.deepStrictEqual(ac(REVISAR_LLEGO_CON), { cerrar: true, descartar: false });
+  assert.deepStrictEqual(ac(REVISAR_LLEGO_VACIA), { cerrar: false, descartar: true });
+  assert.deepStrictEqual(ac(REPETIDA), { cerrar: false, descartar: true });
+  assert.deepStrictEqual(ac(REPETIDA_CON), { cerrar: false, descartar: false });
+});
+
+test('tarjetaRevisarHtml_: explica el motivo y solo ofrece lo que se puede hacer (abrir para cerrarla, descartar, o nada)', () => {
+  const e = crearEntorno();
+  const con = e.ctx.tarjetaRevisarHtml_(REVISAR_LLEGO_CON, '2026-10-15');
+  assert.match(con, /^<div class="carga-card carga-card-revisar tienda-malaga"/);
+  assert.match(con, /El camión ya llegó y la carga sigue abierta: hay que cerrarla\./);
+  assert.match(con, /<button type="button" class="carga-accion" data-destino="Málaga" data-fecha="2026-10-15" data-horario="6:00">Abrir para cerrarla ›<\/button>/);
+  assert.ok(!/Descartar/.test(con), 'con mercancía NO se ofrece descartar');
+
+  const vacia = e.ctx.tarjetaRevisarHtml_(REVISAR_LLEGO_VACIA, '2026-10-15');
+  assert.match(vacia, /El camión ya llegó y la carga está vacía\./);
+  assert.match(vacia, /data-accion="descartar" data-id="CARGA-000630" data-etiqueta="Málaga · Hoy · 6:00">Descartar<\/button>/);
+  assert.ok(!/Abrir para cerrarla/.test(vacia));
+
+  const rep = e.ctx.tarjetaRevisarHtml_(REPETIDA, '2026-10-15');
+  assert.match(rep, /Repetida y vacía: este camión ya tiene su carga \(CARGA-000631\)\./);
+  assert.match(rep, />Descartar<\/button>/);
+
+  const repCon = e.ctx.tarjetaRevisarHtml_(REPETIDA_CON, '2026-10-15');
+  assert.match(repCon, /Repetida con mercancía.*Avisa a administración\./);
+  assert.ok(!/<button/.test(repCon), 'sin botones: no se toca sin avisar');
+});
+
+test('pintarPanelCargas_: ARRIBA solo las abiertas; las cerradas y las huérfanas van en sus secciones, que se esconden si están vacías', () => {
+  const e = crearEntorno();
+  e.ctx.pintarPanelCargas_(TRES_LISTAS([CARGA], [CERRADA], [REPETIDA]));
+  const arriba = e.el('camionPanelLista').innerHTML;
+  assert.strictEqual((arriba.match(/class="carga-card /g) || []).length, 1, 'arriba una sola tarjeta');
+  assert.match(arriba, /CARGA-000638/);
+  assert.ok(!/CARGA-000631|CARGA-000636/.test(arriba), 'ni la cerrada ni la huérfana se mezclan arriba');
   assert.strictEqual(e.el('camionPanelContador').textContent, '(1 abierta)');
-  assert.strictEqual((e.el('camionPanelLista').innerHTML.match(/class="carga-card /g) || []).length, 2);
-  e.ctx.pintarPanelCargas_([CARGA, Object.assign({}, CARGA, { idCarga: 'CARGA-000640' })]);
+  assert.match(e.el('camionListaCerradas').innerHTML, /CARGA-000631/);
+  assert.match(e.el('camionListaRevisar').innerHTML, /CARGA-000636/);
+  assert.strictEqual(e.el('nCerradas').textContent, '(1)');
+  assert.strictEqual(e.el('nRevisar').textContent, '(1)');
+  assert.ok(!e.el('btnSeccionCerradas').classList.contains('vista-oculta'));
+  assert.ok(!e.el('btnSeccionRevisar').classList.contains('vista-oculta'));
+  assert.ok(e.el('camionSeccionCerradas').classList.contains('vista-oculta'), 'las secciones empiezan plegadas');
+  assert.ok(e.el('camionSeccionRevisar').classList.contains('vista-oculta'));
+
+  e.ctx.pintarPanelCargas_(TRES_LISTAS([CARGA, Object.assign({}, CARGA, { idCarga: 'CARGA-000639' })]));
   assert.strictEqual(e.el('camionPanelContador').textContent, '(2 abiertas)');
-  e.ctx.pintarPanelCargas_([]);
+  assert.ok(e.el('btnSeccionCerradas').classList.contains('vista-oculta'), 'sin cerradas no hay barra');
+  assert.ok(e.el('btnSeccionRevisar').classList.contains('vista-oculta'), 'sin huérfanas no hay barra');
+  assert.strictEqual(e.el('nRevisar').textContent, '');
+
+  e.ctx.pintarPanelCargas_(TRES_LISTAS());
   assert.strictEqual(e.el('camionPanelContador').textContent, '');
   assert.match(e.el('camionPanelLista').innerHTML, /No hay ninguna carga abierta/);
 });
 
-test('cargarPanelCargas_: pide la lista al servidor, bloquea el botón mientras tanto y muestra el error si falla', async () => {
+test('pintarPanelCargas_: en «Cerradas» la reabrible es pulsable y la que ya llegó es solo consulta', () => {
   const e = crearEntorno();
-  e.respuestas.listarCargasPanel = () => [CARGA];
+  e.ctx.pintarPanelCargas_(TRES_LISTAS([], [CERRADA, CERRADA_LLEGO], []));
+  const lista = e.el('camionListaCerradas').innerHTML;
+  assert.match(lista, /<button type="button" class="carga-card tienda-marbella" data-destino="Marbella" data-fecha="2026-10-15" data-horario="19:00">/);
+  assert.match(lista, /<div class="carga-card carga-card-consulta/);
+  assert.strictEqual((lista.match(/<button/g) || []).length, 1, 'solo la reabrible es un botón');
+});
+
+test('pintarPanelCargas_: si el servidor no manda alguna lista, se trata como vacía (no revienta)', () => {
+  const e = crearEntorno();
+  assert.doesNotThrow(() => e.ctx.pintarPanelCargas_({}));
+  assert.doesNotThrow(() => e.ctx.pintarPanelCargas_(null));
+  assert.match(e.el('camionPanelLista').innerHTML, /No hay ninguna carga abierta/);
+});
+
+test('alternarSeccionPanel_: acordeón: abrir una cierra la otra, pulsar la abierta la cierra, y aria-expanded lo refleja', () => {
+  const e = crearEntorno();
+  e.ctx.pintarPanelCargas_(TRES_LISTAS([], [CERRADA], [REPETIDA]));
+  const abierta = (n) => !e.el(n === 'cerradas' ? 'camionSeccionCerradas' : 'camionSeccionRevisar').classList.contains('vista-oculta');
+  const aria = (n) => e.el(n === 'cerradas' ? 'btnSeccionCerradas' : 'btnSeccionRevisar').getAttribute('aria-expanded');
+  e.ctx.alternarSeccionPanel_('cerradas');
+  assert.deepStrictEqual([abierta('cerradas'), abierta('revisar'), aria('cerradas'), aria('revisar')], [true, false, 'true', 'false']);
+  e.ctx.alternarSeccionPanel_('revisar');
+  assert.deepStrictEqual([abierta('cerradas'), abierta('revisar'), aria('cerradas'), aria('revisar')], [false, true, 'false', 'true'], 'abrir una cierra la otra: nunca dos a la vez');
+  e.ctx.alternarSeccionPanel_('revisar');
+  assert.deepStrictEqual([abierta('cerradas'), abierta('revisar')], [false, false]);
+});
+
+test('al refrescar el panel la sección abierta sigue abierta mientras tenga algo, y se cierra y esconde cuando se queda vacía', () => {
+  const e = crearEntorno();
+  e.ctx.pintarPanelCargas_(TRES_LISTAS([], [], [REPETIDA, REPETIDA_CON]));
+  e.ctx.alternarSeccionPanel_('revisar');
+  e.ctx.pintarPanelCargas_(TRES_LISTAS([], [], [REPETIDA_CON]));
+  assert.ok(!e.el('camionSeccionRevisar').classList.contains('vista-oculta'), 'sigue abierta tras refrescar');
+  assert.strictEqual(e.el('nRevisar').textContent, '(1)');
+  e.ctx.pintarPanelCargas_(TRES_LISTAS());
+  assert.ok(e.el('camionSeccionRevisar').classList.contains('vista-oculta'));
+  assert.ok(e.el('btnSeccionRevisar').classList.contains('vista-oculta'));
+  assert.strictEqual(e.el('btnSeccionRevisar').getAttribute('aria-expanded'), 'false');
+});
+
+test('cargarPanelCargas_: pide las listas al servidor, bloquea el botón mientras tanto y muestra el error si falla', async () => {
+  const e = crearEntorno();
+  e.respuestas.listarCargasPanel = () => TRES_LISTAS([CARGA], [CERRADA], [REPETIDA]);
   e.ctx.cargarPanelCargas_();
   assert.strictEqual(e.el('btnPanelActualizar').disabled, true);
   assert.strictEqual(e.el('btnPanelActualizar').textContent, 'Actualizando…');
@@ -302,6 +417,8 @@ test('cargarPanelCargas_: pide la lista al servidor, bloquea el botón mientras 
   assert.strictEqual(e.el('btnPanelActualizar').disabled, false);
   assert.strictEqual(e.el('btnPanelActualizar').textContent, 'Actualizar');
   assert.match(e.el('camionPanelLista').innerHTML, /CARGA-000638/);
+  assert.match(e.el('camionListaCerradas').innerHTML, /CARGA-000631/);
+  assert.match(e.el('camionListaRevisar').innerHTML, /CARGA-000636/);
 
   const f = crearEntorno();
   f.respuestas.listarCargasPanel = () => { throw new Error('Supabase caída'); };
@@ -309,6 +426,14 @@ test('cargarPanelCargas_: pide la lista al servidor, bloquea el botón mientras 
   await esperar();
   assert.match(f.el('camionPanelLista').innerHTML, /No se pudo cargar la lista de cargas: Supabase caída/);
   assert.strictEqual(f.el('btnPanelActualizar').disabled, false);
+
+  // el texto del error viene de fuera: se escapa antes de ponerlo en la página
+  const g = crearEntorno();
+  g.respuestas.listarCargasPanel = () => { throw new Error('<img src=x onerror=alert(1)>'); };
+  g.ctx.cargarPanelCargas_();
+  await esperar();
+  assert.ok(!/<img/.test(g.el('camionPanelLista').innerHTML), 'el mensaje de error no puede meter etiquetas en la página');
+  assert.match(g.el('camionPanelLista').innerHTML, /&lt;img/);
 });
 
 test('cargarPanelCargas_: si llegan dos respuestas, la más antigua no pisa a la más nueva', async () => {
@@ -317,23 +442,28 @@ test('cargarPanelCargas_: si llegan dos respuestas, la más antigua no pisa a la
   e.ctx.gas = (nombre) => new Promise((resolver) => { pendientes.push(resolver); });
   e.ctx.cargarPanelCargas_(); // 1.ª petición
   e.ctx.cargarPanelCargas_(); // 2.ª petición (más nueva)
-  pendientes[1]([Object.assign({}, CARGA, { idCarga: 'CARGA-NUEVA' })]);
+  pendientes[1](TRES_LISTAS([Object.assign({}, CARGA, { idCarga: 'CARGA-NUEVA' })]));
   await esperar();
-  pendientes[0]([Object.assign({}, CARGA, { idCarga: 'CARGA-VIEJA' })]);
+  pendientes[0](TRES_LISTAS([Object.assign({}, CARGA, { idCarga: 'CARGA-VIEJA' })]));
   await esperar();
   assert.match(e.el('camionPanelLista').innerHTML, /CARGA-NUEVA/);
   assert.ok(!/CARGA-VIEJA/.test(e.el('camionPanelLista').innerHTML));
 });
 
+// El clic en cualquier parte del panel lo recoge un solo oyente: `closest` solo reconoce los selectores que se le indican.
+function objetivoClic(atributos, selectoresQueCoinciden) {
+  const el = new Elemento('objetivo');
+  el.attrs = atributos;
+  el.closest = (sel) => (selectoresQueCoinciden.indexOf(sel) !== -1 ? el : null);
+  return el;
+}
+
 test('pulsar una tarjeta del panel rellena tienda, fecha y horario del formulario (aunque el horario no esté en la lista) y lleva a «¿Quién carga?»', async () => {
   const e = crearEntorno();
   e.el('camionHorario').opciones.push({ value: '16:00' });
-  const tarjeta = new Elemento('tarjeta');
-  tarjeta.attrs = { 'data-destino': 'Marbella', 'data-fecha': '2026-10-17', 'data-horario': '22:00' };
-  tarjeta.closest = () => tarjeta;
   let chipFecha = null;
   e.ctx.marcarChipSeleccionado_ = (f) => { chipFecha = f; };
-  e.el('camionPanelLista').oyentes.click({ target: tarjeta });
+  e.el('camionPanel').oyentes.click({ target: objetivoClic({ 'data-destino': 'Marbella', 'data-fecha': '2026-10-17', 'data-horario': '22:00' }, ['[data-destino]']) });
   await esperar();
   assert.strictEqual(e.ctx.camionDestinoSeleccionado, 'Marbella');
   assert.strictEqual(e.el('camionHorario').value, '22:00');
@@ -341,6 +471,64 @@ test('pulsar una tarjeta del panel rellena tienda, fecha y horario del formulari
   assert.strictEqual(e.el('camionFecha').value, '2026-10-17');
   assert.strictEqual(chipFecha, '2026-10-17');
   assert.strictEqual(e.el('camionCargadorGrupo').desplazado, true);
+});
+
+test('pulsar «Abrir para cerrarla» de una carga por revisar rellena el formulario igual que una tarjeta', async () => {
+  const e = crearEntorno();
+  e.el('camionPanel').oyentes.click({ target: objetivoClic({ 'data-destino': 'Málaga', 'data-fecha': '2026-10-15', 'data-horario': '6:00' }, ['[data-destino]']) });
+  await esperar();
+  assert.strictEqual(e.ctx.camionDestinoSeleccionado, 'Málaga');
+  assert.strictEqual(e.el('camionHorario').value, '6:00');
+});
+
+test('pulsar una tarjeta de solo consulta (o fuera de las tarjetas) no hace nada', async () => {
+  const e = crearEntorno();
+  e.el('camionPanel').oyentes.click({ target: objetivoClic({}, []) });
+  e.el('camionPanel').oyentes.click({ target: {} });
+  await esperar();
+  assert.strictEqual(e.ctx.camionDestinoSeleccionado, '');
+  assert.strictEqual(e.confirmaciones.length, 0);
+  assert.strictEqual(e.llamadas.length, 0);
+});
+
+test('pulsar una barra del panel abre o cierra su sección', () => {
+  const e = crearEntorno();
+  e.ctx.pintarPanelCargas_(TRES_LISTAS([], [CERRADA], [REPETIDA]));
+  e.el('camionPanel').oyentes.click({ target: objetivoClic({ 'data-seccion': 'revisar' }, ['.carga-barra']) });
+  assert.ok(!e.el('camionSeccionRevisar').classList.contains('vista-oculta'));
+  e.el('camionPanel').oyentes.click({ target: objetivoClic({ 'data-seccion': 'cerradas' }, ['.carga-barra']) });
+  assert.ok(!e.el('camionSeccionCerradas').classList.contains('vista-oculta'));
+  assert.ok(e.el('camionSeccionRevisar').classList.contains('vista-oculta'), 'solo una abierta a la vez');
+});
+
+test('descartar una carga vacía: pide confirmar en rojo y solo descarta al aceptar; después refresca el panel', async () => {
+  const e = crearEntorno();
+  e.respuestas.descartarCarga = () => ({ idCarga: 'CARGA-000636', descartada: true });
+  e.respuestas.listarCargasPanel = () => TRES_LISTAS();
+  e.el('camionPanel').oyentes.click({ target: objetivoClic({ 'data-id': 'CARGA-000636', 'data-etiqueta': 'Marbella · Hoy · 19:00' }, ['[data-accion="descartar"]']) });
+  assert.strictEqual(e.confirmaciones.length, 1);
+  const c = e.confirmaciones[0];
+  assert.match(c.mensaje, /La carga CARGA-000636 \(Marbella · Hoy · 19:00\) está vacía: no tiene soportes ni palets\./);
+  assert.match(c.mensaje, /no se envía ningún informe/);
+  assert.deepStrictEqual([c.titulo, c.boton, c.peligro], ['Descartar carga', 'Descartar', true]);
+  assert.strictEqual(e.llamadas.length, 0, 'no se descarta hasta que se acepta');
+  c.alConfirmar();
+  await esperar();
+  assert.deepStrictEqual(e.llamadas.map((l) => [l.nombre, l.args]), [['descartarCarga', ['CARGA-000636']], ['listarCargasPanel', []]]);
+  assert.strictEqual(e.avisos.length, 0);
+});
+
+test('si el servidor no deja descartar (p. ej. ya tiene mercancía) se avisa con el cuadro propio y el panel se refresca', async () => {
+  const e = crearEntorno();
+  e.respuestas.descartarCarga = () => { throw new Error('No se puede descartar la carga CARGA-000636: tiene mercancía. Ábrela y ciérrala para que salga su informe.'); };
+  e.respuestas.listarCargasPanel = () => TRES_LISTAS();
+  e.ctx.descartarCargaUI_('CARGA-000636', 'Marbella · Hoy · 19:00');
+  e.confirmaciones[0].alConfirmar();
+  await esperar();
+  assert.strictEqual(e.avisos.length, 1);
+  assert.strictEqual(e.avisos[0].titulo, 'No se pudo descartar la carga');
+  assert.match(e.avisos[0].texto, /tiene mercancía/);
+  assert.strictEqual(e.llamadas.filter((l) => l.nombre === 'listarCargasPanel').length, 1, 'se refresca para ver el estado real');
 });
 
 test('mostrarAvisoContexto_: dice de dónde viene el operario y que falta elegir quién carga', () => {
@@ -507,7 +695,7 @@ test('pintarCabeceraCarga_: muestra quién carga y la franja de reapertura solo 
 
 test('volverAlPanel_: vuelve al paso 1 sin cerrar la carga, refresca el panel y conserva al cargador', async () => {
   const e = crearEntorno();
-  e.respuestas.listarCargasPanel = () => [CARGA];
+  e.respuestas.listarCargasPanel = () => TRES_LISTAS([CARGA]);
   e.ctx.cargaActualId = 'CARGA-000638';
   e.ctx.cargadoresSeleccionados_ = ['Juanlu'];
   e.el('camionPaso2').classList.remove('vista-oculta');
@@ -524,7 +712,7 @@ test('volverAlPanel_: vuelve al paso 1 sin cerrar la carga, refresca el panel y 
 
 test('volverAlPanel_(true) tras cerrar una carga borra la selección de quién carga', () => {
   const e = crearEntorno();
-  e.respuestas.listarCargasPanel = () => [];
+  e.respuestas.listarCargasPanel = () => TRES_LISTAS();
   e.ctx.cargadoresSeleccionados_ = ['Juanlu', 'Sebas'];
   e.ctx.volverAlPanel_(true);
   assert.deepStrictEqual(aLocal(e.ctx.cargadoresElegidos_()), []);

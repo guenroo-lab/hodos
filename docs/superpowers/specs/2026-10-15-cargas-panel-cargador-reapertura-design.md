@@ -14,6 +14,9 @@ tenían carga cerrada).
 3. **Reabrir una carga cerrada** para añadir o quitar mercancía, **sin crear otra igual**. Se puede
    hasta la hora y día de llegada (`fecha_entrega` + `horario`); pasada esa hora ya no se modifica.
 4. (Dato de hoy, hecho aparte a mano) pasar los 10 soportes de Marbella 16:00 a Marbella 22:00.
+5. **Cargas huérfanas y pendientes** (pedido después de ver el panel, el mismo día): la pantalla no mezcla abiertas,
+   cerradas y huérfanas; las cargas que se quedan sin terminar se pueden gestionar (cerrar o descartar) y hay una regla
+   clara de cuándo desaparecen (ver «Cuándo desaparece una carga de la pantalla»).
 
 ## Reglas
 
@@ -42,13 +45,38 @@ tenían carga cerrada).
   dos veces al cerrar otra vez, se guarda en `cargas.b2b_conteo` lo que se aplicó en el último cierre
   y al volver a cerrar solo se aplica la diferencia (puede ser negativa si se quitan palets). Al reabrir
   una carga antigua sin `b2b_conteo`, se calcula a partir de sus palets ya cotejados.
-- **Panel**: abiertas con llegada desde ayer, y cerradas con llegada futura (reabribles). Cada tarjeta
-  lleva tienda, fecha y horario, nº de soportes y palets, cargador y estado. Pulsar una tarjeta rellena
-  tienda/fecha/horario del formulario (el flujo de abrir es uno solo). Se refresca al entrar, al volver
-  al paso 1 y con un botón; sin sondeo periódico (egress de Supabase).
+- **Panel: tres listas que NO se mezclan** (`listarCargasPanel` devuelve `{abiertas, cerradas, porRevisar}`; el
+  reparto es `clasificarCargasPanel_`, en `Utilidades.gs`). Arriba, siempre visible, solo **Cargas abiertas**; debajo
+  dos barras plegables, «Cerradas (n)» y «Por revisar (n)», que no se muestran si están vacías y de las que solo
+  se abre una a la vez. Cada tarjeta lleva tienda, fecha y horario, nº de soportes y palets, cargador y estado.
+  Pulsar una abierta, una cerrada reabrible o «Abrir para cerrarla» rellena tienda/fecha/horario del formulario
+  (el flujo de abrir es uno solo: hay que elegir quién carga). Se refresca al entrar, al volver al paso 1 y con un
+  botón; sin sondeo periódico (egress de Supabase).
+- **Un camión sale una sola vez** en el panel: la carga que manda (`elegirCargaExistente_`). Las demás ABIERTAS
+  de ese camión van a «Por revisar» como repetidas; las CERRADAS repetidas y las DESCARTADAS no se muestran.
 - La llegada cruzada desde Carta de Portes SIE (`?vista=operario&tienda=…&fecha=…&horario=…`) ya no
   abre la carga sola: rellena el formulario y espera a que se elija el cargador.
 - Sin diálogos nativos (`alert/confirm/prompt`): en el flujo de abrir carga se sustituyen por los modales propios.
+
+## Cuándo desaparece una carga de la pantalla
+
+| Carga | Dónde se ve | Cuándo desaparece |
+|---|---|---|
+| Abierta, camión aún sin llegar | Cargas abiertas | Al cerrarla (pasa a «Cerradas») |
+| Abierta y el camión ya llegó | Por revisar · «llegó el camión» | Al cerrarla («Abrir para cerrarla», con mercancía) o al descartarla (vacía). Si nadie la toca sigue ahí hasta 7 días después de su entrega |
+| Abierta y repetida (otra del mismo camión manda) | Por revisar · «repetida» | Al descartarla (vacía). Con mercancía no tiene botones: se avisa a administración |
+| Cerrada con entrega hoy o más adelante | Cerradas | Al acabar su día de entrega (medianoche, Madrid). Reabrible hasta la hora de llegada; después, «solo consulta» |
+| Cerrada de un día anterior | — | Ya no sale |
+| Descartada | — | No sale ni cuenta como la carga del camión (se puede abrir otra) |
+
+La ventana de lectura es `DIAS_REVISION_CARGAS_` = 7 días hacia atrás (`fecha_entrega >= hoy − 7`), con solo las columnas
+que pinta el panel. Una carga abierta que lleve más de 7 días sin cerrar deja de verse en la pantalla (sigue en la base).
+
+**Descartar** (`descartarCarga(idCarga)`, botón rojo con confirmación en «Por revisar»): solo una carga ABIERTA y VACÍA
+(0 soportes y 0 palets); con mercancía hay que abrirla y cerrarla para que salga su informe. No envía informe. Queda en
+`cargas` con `estado = 'DESCARTADA'`, `cerrada_por` = quién y `fecha_cierre` = cuándo. Se hace con un bloqueo y un
+`PATCH` condicionado a `estado=eq.ABIERTA`; si un escaneo se cuela entre contar y descartar, se deshace.
+`cargas.estado` es texto libre: no hace falta migración salvo que la base tuviera un `CHECK` sobre el estado.
 
 ## Datos (migración que ejecuta el usuario en Supabase)
 
@@ -72,7 +100,7 @@ Hay que aplicarla **antes** de desplegar el código (la apertura escribe `cargad
   (imprimir, borrar, agrupar…), fuera de este alcance.
 - `Pruebas.gs`: la prueba de `obtenerOCrearCarga` usa un horario propio en cada ejecución (un camión = una carga
   para siempre) y comprueba también el caso «cerrada».
-- Coste de lectura del panel: 1 consulta de `cargas` (todas desde ayer, hace falta ver las del mismo camión) + el
+- Coste de lectura del panel: 1 consulta de `cargas` (los últimos 7 días, solo las columnas del panel) + el
   recuento (`etiquetas`, `palets`; solo baja la columna `batea_id`, lotes de 40 ids) únicamente de lo que se ve y
   de las cargas repetidas. Sin sondeo periódico.
 - Decisión entre cargas repetidas: ver «Reglas». `obtenerOCrearCarga` solo cuenta mercancía cuando el camión tiene
@@ -80,6 +108,7 @@ Hay que aplicarla **antes** de desplegar el código (la apertura escribe `cargad
 
 ## Fuera de alcance
 
-- Borrar cargas, o forzar nombres de usuario por login (la cuenta de Google del muelle es compartida).
+- Borrar cargas de la base (las descartadas solo quedan marcadas), unir dos cargas repetidas con mercancía, o forzar
+  nombres de usuario por login (la cuenta de Google del muelle es compartida).
 - Atribuir cada soporte escaneado a una persona (solo se anota a nivel de carga).
 - Un índice único en base de datos para `destino+fecha+horario` (hay duplicados históricos).

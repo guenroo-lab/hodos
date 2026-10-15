@@ -483,3 +483,45 @@ function elegirCargaExistente_(cargas, contenidos) {
   });
   return mejor;
 }
+
+// Un camión = destino + fecha de entrega + horario.
+function claveCamionCarga_(c) {
+  return [c.destino, String(c.fechaEntrega || '').slice(0, 10), c.horario].join('|');
+}
+
+// Reparte las cargas de la pantalla del muelle en tres listas que NO se mezclan (2026-10-15):
+//   abiertas   = la carga de cada camión que sigue abierta y cuyo camión aún no ha llegado
+//   cerradas   = cargas cerradas de hoy en adelante: se pueden reabrir hasta la llegada del camión y, ya
+//                llegado, quedan solo de consulta hasta que acaba el día
+//   porRevisar = lo que se quedó sin terminar: cargas abiertas cuyo camión YA llegó (hay que cerrarlas o, si
+//                están vacías, descartarlas) y cargas abiertas REPETIDAS de un camión que ya tiene la suya
+// Un camión tiene UNA carga que manda (elegirCargaExistente_, con `contenidos` = {idCarga: soportes + palets});
+// las demás abiertas del mismo camión van a «por revisar» como repetidas. Las cerradas repetidas y las
+// descartadas no se muestran. Devuelve las filas tal cual (sin recuentos); `hoyISO` = yyyy-MM-dd de hoy en Madrid.
+function clasificarCargasPanel_(cargas, contenidos, ahoraMs, hoyISO) {
+  var porCamion = {};
+  var claves = [];
+  (cargas || []).forEach(function (c) {
+    var k = claveCamionCarga_(c);
+    if (!porCamion[k]) { porCamion[k] = []; claves.push(k); }
+    porCamion[k].push(c);
+  });
+  var resultado = { abiertas: [], cerradas: [], porRevisar: [] };
+  claves.forEach(function (k) {
+    var grupo = porCamion[k];
+    var principal = elegirCargaExistente_(grupo, contenidos);
+    if (!principal) return;
+    if (principal.estado === 'ABIERTA') {
+      if (cargaModificablePorLlegada_(principal, ahoraMs)) resultado.abiertas.push(principal);
+      else resultado.porRevisar.push({ carga: principal, motivo: 'LLEGO', principal: '' });
+    } else if (String(principal.fechaEntrega || '').slice(0, 10) >= hoyISO) {
+      resultado.cerradas.push(principal);
+    }
+    grupo.forEach(function (c) {
+      if (c === principal || c.estado !== 'ABIERTA') return;
+      var tieneMercancia = !!contenidos && Number(contenidos[c.idCarga]) > 0;
+      resultado.porRevisar.push({ carga: c, motivo: tieneMercancia ? 'REPETIDA_CON_MERCANCIA' : 'REPETIDA', principal: principal.idCarga });
+    });
+  });
+  return resultado;
+}

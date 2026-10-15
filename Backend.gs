@@ -754,25 +754,26 @@ function contenidoPorCarga_(cargas) {
   return contenidos;
 }
 
-// Cargas que se ven en la pantalla del muelle (2026-10-15): las ABIERTAS (de ayer en adelante, para no
-// arrastrar restos viejos) y las CERRADAS cuyo camión aún no ha llegado (se pueden reabrir). Primero las
-// abiertas y dentro de cada grupo por hora de llegada. Un camión (destino+fecha+horario) sale UNA vez: si
-// por datos antiguos tiene varias cargas, se ve la misma que abriría obtenerOCrearCarga (la que lleva
-// mercancía). El cliente no la repite por sondeo (egress de Supabase): solo se cuentan soportes y palets de
-// lo que se ve y de las cargas repetidas.
+var DIAS_REVISION_CARGAS_ = 7; // hasta cuántos días atrás se buscan cargas que se quedaron sin cerrar
+// Solo lo que pinta el panel (no baja pdf_url, b2b_conteo, email_enviado...).
+var COLUMNAS_PANEL_CARGAS_ = 'id_carga,destino,fecha_entrega,horario,estado,cargador,fecha_creacion,fecha_cierre,cerrada_por,reabierta_en';
+
+// Pantalla del muelle (2026-10-15): tres listas que NO se mezclan (ver clasificarCargasPanel_):
+//   abiertas   = cargas abiertas cuyo camión aún no ha llegado
+//   cerradas   = cargas cerradas de hoy en adelante (reabribles hasta la llegada; ya llegado, solo consulta)
+//   porRevisar = cargas que se quedaron sin terminar (abiertas con el camión ya llegado y repetidas vacías)
+// Un camión (destino+fecha+horario) sale UNA vez: si por datos antiguos tiene varias cargas, manda la que
+// abriría obtenerOCrearCarga (la que lleva mercancía). Las cargas cerradas desaparecen de la lista al acabar
+// su día de entrega (medianoche, Madrid); las sin terminar siguen en «por revisar» hasta que se cierran o se
+// descartan (hasta DIAS_REVISION_CARGAS_ días). El cliente no la repite por sondeo (egress de Supabase): solo
+// se cuentan soportes y palets de lo que se ve y de las cargas repetidas.
 function listarCargasPanel() {
   var ahora = new Date().getTime();
-  var ayer = fechaMadridISO_(ahora - 24 * 3600000);
-  var filas = leerCargas_('fecha_entrega=gte.' + ayer);
-  if (filas.length === 0) return [];
-
-  var porCamion = {};
-  var camiones = [];
-  filas.forEach(function (c) {
-    var clave = [c.destino, c.fechaEntrega, c.horario].join('|');
-    if (!porCamion[clave]) { porCamion[clave] = []; camiones.push(clave); }
-    porCamion[clave].push(c);
-  });
+  var hoy = fechaMadridISO_(ahora);
+  var desde = fechaMadridISO_(ahora - DIAS_REVISION_CARGAS_ * 24 * 3600000);
+  var filas = leerCargas_('fecha_entrega=gte.' + desde, COLUMNAS_PANEL_CARGAS_);
+  var resultado = { abiertas: [], cerradas: [], porRevisar: [] };
+  if (filas.length === 0) return resultado;
 
   var soportes = {};
   var palets = {};
@@ -782,39 +783,93 @@ function listarCargasPanel() {
     var p = contarPorCarga_('palets', ids);
     ids.forEach(function (id) { soportes[id] = s[id] || 0; palets[id] = p[id] || 0; });
   };
+
+  // 1) los camiones con más de una carga viva: hace falta saber cuál lleva mercancía para decidir cuál manda
+  var porCamion = {};
+  filas.forEach(function (c) {
+    if (c.estado !== 'ABIERTA' && c.estado !== 'CERRADA') return;
+    var k = claveCamionCarga_(c);
+    (porCamion[k] = porCamion[k] || []).push(c);
+  });
   var repetidas = [];
-  camiones.forEach(function (k) { if (porCamion[k].length > 1) repetidas = repetidas.concat(porCamion[k]); });
+  Object.keys(porCamion).forEach(function (k) { if (porCamion[k].length > 1) repetidas = repetidas.concat(porCamion[k]); });
   if (repetidas.length) contar(repetidas);
   var contenidos = {};
   Object.keys(soportes).forEach(function (id) { contenidos[id] = soportes[id] + palets[id]; });
 
-  var cargas = camiones.map(function (k) { return elegirCargaExistente_(porCamion[k], contenidos); }).filter(function (c) {
-    return c && (c.estado === 'ABIERTA' || (c.estado === 'CERRADA' && cargaModificablePorLlegada_(c, ahora)));
-  });
-  if (cargas.length === 0) return [];
-  var sinContar = cargas.filter(function (c) { return soportes[c.idCarga] === undefined; });
+  // 2) reparto en las tres listas y recuento de lo que se va a mostrar y aún no está contado
+  var clasif = clasificarCargasPanel_(filas, contenidos, ahora, hoy);
+  var visibles = clasif.abiertas.concat(clasif.cerradas, clasif.porRevisar.map(function (x) { return x.carga; }));
+  var sinContar = visibles.filter(function (c) { return soportes[c.idCarga] === undefined; });
   if (sinContar.length) contar(sinContar);
 
-  var items = cargas.map(function (c) {
+  var llegadaMs = function (c) { var l = fechaLlegadaCarga_(c.fechaEntrega, c.horario); return l == null ? 0 : l; };
+  var dato = function (c) {
     var llegada = fechaLlegadaCarga_(c.fechaEntrega, c.horario);
-    var abierta = c.estado === 'ABIERTA';
+    var yaLlego = !cargaModificablePorLlegada_(c, ahora);
+    var s = soportes[c.idCarga] || 0;
+    var p = palets[c.idCarga] || 0;
     return {
-      abierta: abierta, llegadaMs: llegada == null ? 0 : llegada,
-      dato: {
-        idCarga: c.idCarga, destino: c.destino, fechaEntrega: fechaComoTexto(c.fechaEntrega).split('T')[0], horario: c.horario,
-        estado: c.estado, cargador: c.cargador || '',
-        fechaCreacion: fechaComoTexto(c.fechaCreacion), fechaCierre: fechaComoTexto(c.fechaCierre),
-        soportes: soportes[c.idCarga] || 0, palets: palets[c.idCarga] || 0,
-        llegada: llegada == null ? '' : new Date(llegada).toISOString(),
-        reabrible: !abierta, vencida: abierta && !cargaModificablePorLlegada_(c, ahora), reabierta: !!c.reabiertaEn
-      }
+      idCarga: c.idCarga, destino: c.destino, fechaEntrega: fechaComoTexto(c.fechaEntrega).split('T')[0], horario: c.horario,
+      estado: c.estado, cargador: c.cargador || '',
+      fechaCreacion: fechaComoTexto(c.fechaCreacion), fechaCierre: fechaComoTexto(c.fechaCierre), cerradaPor: c.cerradaPor || '',
+      soportes: s, palets: p, vacia: s + p === 0,
+      llegada: llegada == null ? '' : new Date(llegada).toISOString(),
+      yaLlego: yaLlego, reabrible: c.estado === 'CERRADA' && !yaLlego, reabierta: !!c.reabiertaEn
     };
+  };
+  resultado.abiertas = clasif.abiertas.slice().sort(function (a, b) { return llegadaMs(a) - llegadaMs(b); }).map(dato);
+  // cerradas: primero las que aún se pueden reabrir (por hora de llegada) y luego las que ya llegaron (la última, primero)
+  resultado.cerradas = clasif.cerradas.slice().sort(function (a, b) {
+    var aLlego = !cargaModificablePorLlegada_(a, ahora);
+    var bLlego = !cargaModificablePorLlegada_(b, ahora);
+    if (aLlego !== bLlego) return aLlego ? 1 : -1;
+    return aLlego ? llegadaMs(b) - llegadaMs(a) : llegadaMs(a) - llegadaMs(b);
+  }).map(dato);
+  resultado.porRevisar = clasif.porRevisar.slice().sort(function (a, b) { return llegadaMs(a.carga) - llegadaMs(b.carga); }).map(function (x) {
+    var d = dato(x.carga);
+    d.motivo = x.motivo;
+    d.principal = x.principal;
+    return d;
   });
-  items.sort(function (a, b) {
-    if (a.abierta !== b.abierta) return a.abierta ? -1 : 1;
-    return a.llegadaMs - b.llegadaMs;
-  });
-  return items.map(function (x) { return x.dato; });
+  return resultado;
+}
+
+// Descarta una carga ABIERTA y VACÍA (sin soportes ni palets): la quita de las listas sin enviar ningún informe.
+// Sirve para las cargas huérfanas: abiertas por error o repetidas del mismo camión (2026-10-15). Una carga con
+// mercancía NO se descarta: hay que cerrarla (así sale su informe). Queda en la tabla con estado DESCARTADA
+// (no cuenta como la carga del camión: se puede abrir otra) y con quién y cuándo la descartó en cerrada_por y
+// fecha_cierre.
+function descartarCarga(idCarga) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var cargas = leerCargas_('id_carga=eq.' + encodeURIComponent(idCarga));
+    if (cargas.length === 0) throw new Error('Carga no encontrada: ' + idCarga);
+    var c = cargas[0];
+    if (c.estado === 'DESCARTADA') return { idCarga: idCarga, yaDescartada: true };
+    if (c.estado !== 'ABIERTA') throw new Error('Solo se puede descartar una carga abierta: ' + idCarga + ' está ' + c.estado + '.');
+    var sinMercancia = function () { return contenidoPorCarga_([c])[idCarga] === 0; };
+    var explicacion = 'No se puede descartar la carga ' + idCarga + ': tiene mercancía. Ábrela y ciérrala para que salga su informe.';
+    if (!sinMercancia()) throw new Error(explicacion);
+    var hecha = actualizarCargaCondicional_(idCarga, {
+      estado: 'DESCARTADA', cerradaPor: Session.getActiveUser().getEmail() || 'desconocido', fechaCierre: new Date().toISOString()
+    }, 'estado=eq.ABIERTA');
+    if (!hecha) throw new Error('No se pudo descartar la carga ' + idCarga + ': cambió mientras tanto. Vuelve a intentarlo.');
+    try {
+      CacheService.getScriptCache().remove(claveCacheCarga_(idCarga)); // que ningún escaneo la dé por abierta
+    } catch (e) {
+      // Ver nota de cachearCargaAbierta_: no debe impedir informar del descarte correcto.
+    }
+    // Si un escaneo se coló entre contar y descartar, se deshace: una carga con mercancía nunca queda descartada.
+    if (!sinMercancia()) {
+      actualizarCargaCondicional_(idCarga, { estado: 'ABIERTA', cerradaPor: null, fechaCierre: null }, 'estado=eq.DESCARTADA');
+      throw new Error(explicacion);
+    }
+    return { idCarga: idCarga, descartada: true };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function obtenerCarga(idCarga) {

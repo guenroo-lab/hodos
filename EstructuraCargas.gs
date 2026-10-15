@@ -45,8 +45,10 @@ function insertarCarga_(datosCarga) {
   return filaCargaDesdeSupabase_(insertadas[0]);
 }
 
-function leerCargas_(filtroPostgrest) {
-  return supaGet_('cargas', filtroPostgrest).map(filaCargaDesdeSupabase_);
+// `columnas` (opcional) = lista de columnas de PostgREST separadas por comas; sin ella se baja la fila entera.
+// Los campos que no se piden llegan como undefined.
+function leerCargas_(filtroPostgrest, columnas) {
+  return supaGet_('cargas', filtroPostgrest, columnas).map(filaCargaDesdeSupabase_);
 }
 
 function actualizarCarga_(idCarga, cambios) {

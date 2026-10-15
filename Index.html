@@ -330,6 +330,8 @@
     /* ── Cargas activas y cargador (Cargar camión, paso 1) — 2026-10-15 ── */
     .carga-panel { margin-bottom:22px; padding:20px; }
     .carga-panel-titulo { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+    /* En móvil el contador no se parte por dentro del paréntesis: si no cabe, baja entero a la línea de abajo. */
+    .carga-panel-titulo .pendientes-contador { display:inline-block; white-space:nowrap; }
     .carga-panel-lista { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap:12px; }
     .carga-panel-lista .sin-resultados, .carga-panel-lista .aviso-error { grid-column:1 / -1; padding:14px; margin:0; text-align:center; }
     .carga-card {
@@ -355,6 +357,37 @@
     .carga-card-pie { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:2px; }
     .carga-card-id { font-size:11px; opacity:0.65; }
     .carga-card-accion { font-size:12.5px; font-weight:800; color:var(--color-accent-text); white-space:nowrap; }
+    .carga-card-accion-apagada { color:var(--text-primary); opacity:0.6; font-weight:600; }
+    /* Cerradas que ya llegaron: solo consulta (no son pulsables). */
+    .carga-card-consulta { cursor:default; opacity:0.72; }
+    .carga-card-consulta:hover { border-color:var(--input-border); }
+    /* Cargas por revisar: tarjeta con sus propios botones (no es un botón entero). */
+    .carga-card-revisar { cursor:default; }
+    .carga-card-revisar:hover { border-color:var(--input-border); }
+    .carga-card-motivo { font-size:12.5px; line-height:1.4; }
+    .carga-card-acciones { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
+    .carga-accion {
+      min-height:44px; padding:8px 14px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer;
+      background:var(--bg-panel); border:1px solid var(--input-border); color:var(--text-primary);
+    }
+    .carga-accion:hover { border-color:var(--color-accent); }
+    .carga-accion-peligro { background:#c62828; border-color:#c62828; color:#fff; }
+    .carga-accion-peligro:hover { border-color:#c62828; filter:brightness(1.08); }
+    /* Secciones plegables (cerradas de hoy / por revisar): debajo de lo abierto y nunca mezcladas con ello. */
+    .carga-panel-barras { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+    .carga-barra {
+      display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:8px 14px; border-radius:10px;
+      font-size:13px; font-weight:700; cursor:pointer;
+      background:var(--bg-panel); border:1px dashed var(--input-border); color:var(--text-primary);
+    }
+    .carga-barra::before { content:'▸'; }
+    .carga-barra[aria-expanded="true"] { border-style:solid; border-color:var(--color-accent); }
+    .carga-barra[aria-expanded="true"]::before { content:'▾'; }
+    .carga-barra-n { font-weight:800; color:var(--color-accent-text); }
+    .carga-barra-revisar { border-color:#e67e22; }
+    .carga-barra-revisar .carga-barra-n { background:#e67e22; color:#fff; border-radius:999px; padding:1px 9px; }
+    .carga-seccion { margin-top:14px; padding-top:12px; border-top:1px solid var(--input-border); }
+    .carga-seccion-ayuda { margin:0 0 10px; font-size:12.5px; opacity:0.8; }
 
     .cargador-grupo { grid-column:1 / -1; }
     .cargador-ayuda { font-weight:400; opacity:0.75; margin-left:6px; }
@@ -946,14 +979,28 @@
         <div class="paso" data-paso="3"><div class="num">3</div><div class="etiqueta">Cerrar</div></div>
       </div>
       <div id="camionPaso1">
-        <!-- Cargas activas (2026-10-15): camiones con carga abierta ahora y cargas cerradas que aún se pueden reabrir.
-             Un camión (tienda + fecha + horario) tiene UNA sola carga: pulsar una tarjeta rellena el formulario de abajo. -->
+        <!-- Cargas (2026-10-15). ARRIBA solo las cargas abiertas; lo demás va en secciones aparte y plegadas para no
+             mezclarlo: «Cerradas» (reabribles hasta que llegue el camión) y «Por revisar» (cargas que se
+             quedaron sin terminar: cerrarlas o descartarlas). Un camión (tienda + fecha + horario) tiene UNA sola
+             carga: pulsar una tarjeta rellena el formulario de abajo. -->
         <div class="section carga-panel" id="camionPanel">
           <h2 class="carga-panel-titulo">
-            <span>Cargas activas <span class="pendientes-contador" id="camionPanelContador"></span></span>
+            <span>Cargas abiertas <span class="pendientes-contador" id="camionPanelContador"></span></span>
             <button type="button" class="btn-link" id="btnPanelActualizar" onclick="cargarPanelCargas_()" title="Actualizar">Actualizar</button>
           </h2>
           <div class="carga-panel-lista" id="camionPanelLista"><p class="sin-resultados">Cargando…</p></div>
+          <div class="carga-panel-barras">
+            <button type="button" class="carga-barra vista-oculta" id="btnSeccionCerradas" data-seccion="cerradas" aria-expanded="false">Cerradas <span class="carga-barra-n" id="nCerradas"></span></button>
+            <button type="button" class="carga-barra carga-barra-revisar vista-oculta" id="btnSeccionRevisar" data-seccion="revisar" aria-expanded="false">Por revisar <span class="carga-barra-n" id="nRevisar"></span></button>
+          </div>
+          <div class="carga-seccion vista-oculta" id="camionSeccionCerradas">
+            <p class="carga-seccion-ayuda">Se pueden reabrir hasta que llegue el camión; después quedan solo de consulta. Desaparecen al acabar su día de entrega.</p>
+            <div class="carga-panel-lista" id="camionListaCerradas"></div>
+          </div>
+          <div class="carga-seccion vista-oculta" id="camionSeccionRevisar">
+            <p class="carga-seccion-ayuda">Cargas que se quedaron sin terminar. Si tienen mercancía, ábrelas y ciérralas; si están vacías, descártalas.</p>
+            <div class="carga-panel-lista" id="camionListaRevisar"></div>
+          </div>
         </div>
         <p class="hint-texto vista-oculta" id="camionContextoAviso"></p>
         <label>Tienda destino</label>
@@ -2721,42 +2768,115 @@
     return texto;
   }
 
-  // Cómo se ve cada carga en el panel. «Pasó su hora» = abierta cuyo camión ya debería haber llegado (se les
-  // ha olvidado cerrarla o sigue cargando con retraso): se ve de lejos para que no se quede abierta sin querer.
+  // Cómo se ve cada carga. «Llegó el camión» = abierta cuyo camión ya llegó (se quedó sin cerrar): va en «Por revisar».
   function estadoVisualCarga_(c) {
-    if (c.estado === 'ABIERTA') {
-      return c.vencida
-        ? { clase: 'est-vencida', texto: 'ABIERTA · PASÓ SU HORA', accion: 'Continuar ›' }
-        : { clase: 'est-abierta', texto: 'ABIERTA', accion: 'Continuar ›' };
-    }
-    return { clase: 'est-cerrada', texto: 'CERRADA', accion: 'Reabrir ›' };
+    if (c.motivo === 'LLEGO') return { clase: 'est-vencida', texto: 'ABIERTA · LLEGÓ EL CAMIÓN' };
+    if (c.motivo === 'REPETIDA') return { clase: 'est-vencida', texto: 'REPETIDA · VACÍA' };
+    if (c.motivo === 'REPETIDA_CON_MERCANCIA') return { clase: 'est-vencida', texto: 'REPETIDA · CON MERCANCÍA' };
+    if (c.estado === 'ABIERTA') return { clase: 'est-abierta', texto: 'ABIERTA' };
+    return { clase: 'est-cerrada', texto: c.yaLlego ? 'CERRADA · YA LLEGÓ' : 'CERRADA' };
   }
 
-  function tarjetaCargaHtml_(c, hoy) {
+  // Parte común de todas las tarjetas: tienda, hora, día, estado, cifras y cargador.
+  function cuerpoCargaHtml_(c, hoy) {
     var est = estadoVisualCarga_(c);
-    var slug = TIENDA_SLUG_[c.destino] || 'otra';
-    return '<button type="button" class="carga-card tienda-' + slug + '" data-destino="' + escapeHtml_(c.destino) +
-      '" data-fecha="' + escapeHtml_(c.fechaEntrega) + '" data-horario="' + escapeHtml_(c.horario) + '">' +
-      '<span class="carga-card-cab"><span class="carga-card-tienda">' + escapeHtml_(c.destino) + '</span>' +
+    return '<span class="carga-card-cab"><span class="carga-card-tienda">' + escapeHtml_(c.destino) + '</span>' +
       '<span class="carga-card-hora">' + escapeHtml_(c.horario) + '</span>' +
       '<span class="carga-card-dia">' + escapeHtml_(etiquetaDiaCarga_(c.fechaEntrega, hoy)) + '</span></span>' +
       '<span class="carga-card-estado ' + est.clase + '">' + est.texto + (c.reabierta ? ' · REABIERTA' : '') + '</span>' +
       '<span class="carga-card-cifras">' + textoCifrasCarga_(c) + '</span>' +
-      '<span class="carga-card-cargador">' + (c.cargador ? '👷 ' + escapeHtml_(c.cargador) : 'Sin cargador anotado') + '</span>' +
-      '<span class="carga-card-pie"><span class="carga-card-id">' + escapeHtml_(c.idCarga) + '</span>' +
-      '<span class="carga-card-accion">' + est.accion + '</span></span></button>';
+      '<span class="carga-card-cargador">' + (c.cargador ? '👷 ' + escapeHtml_(c.cargador) : 'Sin cargador anotado') + '</span>';
   }
 
-  function pintarPanelCargas_(lista) {
-    var abiertas = lista.filter(function (c) { return c.estado === 'ABIERTA'; }).length;
-    document.getElementById('camionPanelContador').textContent = lista.length ? '(' + abiertas + (abiertas === 1 ? ' abierta' : ' abiertas') + ')' : '';
-    var cont = document.getElementById('camionPanelLista');
-    if (!lista.length) {
-      cont.innerHTML = '<p class="sin-resultados">No hay ninguna carga abierta ahora mismo. Elige tienda, fecha y horario para abrir una.</p>';
-      return;
+  // Los datos del camión que rellenan el formulario al pulsar una tarjeta o un botón.
+  function datosCamionHtml_(c) {
+    return ' data-destino="' + escapeHtml_(c.destino) + '" data-fecha="' + escapeHtml_(c.fechaEntrega) + '" data-horario="' + escapeHtml_(c.horario) + '"';
+  }
+
+  function claseTiendaCarga_(c) {
+    return 'tienda-' + (TIENDA_SLUG_[c.destino] || 'otra');
+  }
+
+  // Abiertas y cerradas que aún se pueden reabrir: la tarjeta entera es un botón que rellena el formulario.
+  function tarjetaCargaHtml_(c, hoy) {
+    return '<button type="button" class="carga-card ' + claseTiendaCarga_(c) + '"' + datosCamionHtml_(c) + '>' + cuerpoCargaHtml_(c, hoy) +
+      '<span class="carga-card-pie"><span class="carga-card-id">' + escapeHtml_(c.idCarga) + '</span>' +
+      '<span class="carga-card-accion">' + (c.estado === 'ABIERTA' ? 'Continuar ›' : 'Reabrir ›') + '</span></span></button>';
+  }
+
+  // Cerradas cuyo camión ya llegó: solo consulta (ya no se pueden modificar), sin botón.
+  function tarjetaConsultaHtml_(c, hoy) {
+    return '<div class="carga-card carga-card-consulta ' + claseTiendaCarga_(c) + '">' + cuerpoCargaHtml_(c, hoy) +
+      '<span class="carga-card-pie"><span class="carga-card-id">' + escapeHtml_(c.idCarga) + '</span>' +
+      '<span class="carga-card-accion carga-card-accion-apagada">Solo consulta</span></span></div>';
+  }
+
+  function motivoRevisarTexto_(c) {
+    if (c.motivo === 'LLEGO') return c.vacia ? 'El camión ya llegó y la carga está vacía.' : 'El camión ya llegó y la carga sigue abierta: hay que cerrarla.';
+    if (c.motivo === 'REPETIDA') return 'Repetida y vacía: este camión ya tiene su carga (' + c.principal + ').';
+    if (c.motivo === 'REPETIDA_CON_MERCANCIA') return 'Repetida con mercancía: este camión ya tiene su carga (' + c.principal + '). Avisa a administración.';
+    return '';
+  }
+
+  // Qué se puede hacer con una carga por revisar: cerrarla (tiene mercancía y el camión ya llegó) y/o descartarla
+  // (está vacía). Una repetida con mercancía no tiene botones: no hay que tocarla sin avisar.
+  function accionesRevisar_(c) {
+    return { cerrar: c.motivo === 'LLEGO' && !c.vacia, descartar: !!c.vacia && (c.motivo === 'LLEGO' || c.motivo === 'REPETIDA') };
+  }
+
+  function tarjetaRevisarHtml_(c, hoy) {
+    var ac = accionesRevisar_(c);
+    var botones = '';
+    if (ac.cerrar) botones += '<button type="button" class="carga-accion"' + datosCamionHtml_(c) + '>Abrir para cerrarla ›</button>';
+    if (ac.descartar) {
+      botones += '<button type="button" class="carga-accion carga-accion-peligro" data-accion="descartar" data-id="' + escapeHtml_(c.idCarga) +
+        '" data-etiqueta="' + escapeHtml_([c.destino, etiquetaDiaCarga_(c.fechaEntrega, hoy), c.horario].join(' · ')) + '">Descartar</button>';
     }
+    return '<div class="carga-card carga-card-revisar ' + claseTiendaCarga_(c) + '">' + cuerpoCargaHtml_(c, hoy) +
+      '<span class="carga-card-motivo">' + escapeHtml_(motivoRevisarTexto_(c)) + '</span>' +
+      '<span class="carga-card-pie"><span class="carga-card-id">' + escapeHtml_(c.idCarga) + '</span></span>' +
+      (botones ? '<span class="carga-card-acciones">' + botones + '</span>' : '') + '</div>';
+  }
+
+  // Las dos secciones plegables de debajo de lo abierto. Solo una abierta a la vez (acordeón) y cada una se
+  // esconde entera cuando no tiene nada: así lo abierto nunca se mezcla con lo cerrado ni con lo que hay que revisar.
+  var SECCIONES_PANEL_ = {
+    cerradas: { boton: 'btnSeccionCerradas', caja: 'camionSeccionCerradas', lista: 'camionListaCerradas', n: 'nCerradas' },
+    revisar: { boton: 'btnSeccionRevisar', caja: 'camionSeccionRevisar', lista: 'camionListaRevisar', n: 'nRevisar' }
+  };
+
+  function mostrarSeccionPanel_(nombre, visible) {
+    var s = SECCIONES_PANEL_[nombre];
+    document.getElementById(s.caja).classList.toggle('vista-oculta', !visible);
+    document.getElementById(s.boton).setAttribute('aria-expanded', visible ? 'true' : 'false');
+  }
+
+  function alternarSeccionPanel_(nombre) {
+    var abrir = document.getElementById(SECCIONES_PANEL_[nombre].caja).classList.contains('vista-oculta');
+    Object.keys(SECCIONES_PANEL_).forEach(function (n) { mostrarSeccionPanel_(n, abrir && n === nombre); });
+  }
+
+  function pintarSeccionPanel_(nombre, lista, htmlTarjeta, hoy) {
+    var s = SECCIONES_PANEL_[nombre];
+    var hay = lista.length > 0;
+    document.getElementById(s.boton).classList.toggle('vista-oculta', !hay);
+    document.getElementById(s.n).textContent = hay ? '(' + lista.length + ')' : '';
+    if (!hay) mostrarSeccionPanel_(nombre, false);
+    document.getElementById(s.lista).innerHTML = lista.map(function (c) { return htmlTarjeta(c, hoy); }).join('');
+  }
+
+  // datos = { abiertas, cerradas, porRevisar } (listarCargasPanel). Arriba SOLO las abiertas.
+  function pintarPanelCargas_(datos) {
+    var abiertas = (datos && datos.abiertas) || [];
+    var cerradas = (datos && datos.cerradas) || [];
+    var porRevisar = (datos && datos.porRevisar) || [];
     var hoy = fechaComoValorInput_(new Date());
-    cont.innerHTML = lista.map(function (c) { return tarjetaCargaHtml_(c, hoy); }).join('');
+    document.getElementById('camionPanelContador').textContent = abiertas.length ? '(' + abiertas.length + (abiertas.length === 1 ? ' abierta' : ' abiertas') + ')' : '';
+    document.getElementById('camionPanelLista').innerHTML = abiertas.length
+      ? abiertas.map(function (c) { return tarjetaCargaHtml_(c, hoy); }).join('')
+      : '<p class="sin-resultados">No hay ninguna carga abierta ahora mismo. Elige tienda, fecha y horario para abrir una.</p>';
+    pintarSeccionPanel_('cerradas', cerradas, function (c, h) { return c.reabrible ? tarjetaCargaHtml_(c, h) : tarjetaConsultaHtml_(c, h); }, hoy);
+    pintarSeccionPanel_('revisar', porRevisar, tarjetaRevisarHtml_, hoy);
   }
 
   function cargarPanelCargas_() {
@@ -2764,8 +2884,8 @@
     var boton = document.getElementById('btnPanelActualizar');
     boton.disabled = true;
     boton.textContent = 'Actualizando…';
-    gas('listarCargasPanel').then(function (lista) {
-      if (miPeticion === panelPeticion_) pintarPanelCargas_(lista);
+    gas('listarCargasPanel').then(function (datos) {
+      if (miPeticion === panelPeticion_) pintarPanelCargas_(datos);
     }).catch(function (err) {
       if (miPeticion !== panelPeticion_) return;
       document.getElementById('camionPanelContador').textContent = '';
@@ -2776,6 +2896,24 @@
       boton.disabled = false;
       boton.textContent = 'Actualizar';
     });
+  }
+
+  // Descarta una carga huérfana VACÍA (el servidor lo vuelve a comprobar): desaparece de las listas, sin informe.
+  function descartarCargaUI_(idCarga, etiqueta) {
+    mostrarConfirmacion_(
+      'La carga ' + idCarga + ' (' + etiqueta + ') está vacía: no tiene soportes ni palets.\n\nSi la descartas desaparece de las listas y no se envía ningún informe.',
+      function () {
+        gas('descartarCarga', idCarga).then(function () {
+          cargarPanelCargas_();
+        }).catch(function (err) {
+          mostrarModalAviso_('No se pudo descartar la carga', mensajeError_(err));
+          cargarPanelCargas_();
+        });
+      },
+      'Descartar carga',
+      'Descartar',
+      true
+    );
   }
 
   // Deja el formulario del paso 1 con ese camión (tienda + fecha + horario) y lleva la vista al selector de cargador.
@@ -2792,10 +2930,17 @@
     });
   }
 
-  document.getElementById('camionPanelLista').addEventListener('click', function (ev) {
-    var tarjeta = ev.target && ev.target.closest ? ev.target.closest('.carga-card') : null;
-    if (!tarjeta) return;
-    rellenarFormularioCamion_(tarjeta.getAttribute('data-destino'), tarjeta.getAttribute('data-fecha'), tarjeta.getAttribute('data-horario'));
+  // Un solo oyente para todo el panel: las barras plegables, «Descartar» y las tarjetas/botones que llevan los datos de
+  // un camión (rellenan el formulario). Las tarjetas de «solo consulta» no llevan datos y no hacen nada.
+  document.getElementById('camionPanel').addEventListener('click', function (ev) {
+    var objetivo = ev.target;
+    if (!objetivo || !objetivo.closest) return;
+    var barra = objetivo.closest('.carga-barra');
+    if (barra) { alternarSeccionPanel_(barra.getAttribute('data-seccion')); return; }
+    var descartar = objetivo.closest('[data-accion="descartar"]');
+    if (descartar) { descartarCargaUI_(descartar.getAttribute('data-id'), descartar.getAttribute('data-etiqueta')); return; }
+    var camion = objetivo.closest('[data-destino]');
+    if (camion) rellenarFormularioCamion_(camion.getAttribute('data-destino'), camion.getAttribute('data-fecha'), camion.getAttribute('data-horario'));
   });
 
   // Llegada cruzada desde Carta de Portes SIE (?vista=operario&tienda=…&fecha=…&horario=…): el formulario queda

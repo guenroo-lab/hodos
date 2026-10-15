@@ -370,10 +370,21 @@ implementadas: Módulo 1 (carga por lote + etiquetas), Cabecera+Buscadores, Fase
   (la apertura escribe `cargador`: sin la columna, abrir una carga falla). Al cerrar otra vez una carga
   reabierta: asunto y franja «ACTUALIZADO» y, al B2B de Leroy Merlin, solo la diferencia (`b2b_conteo`).
   `reabrirCarga` NO escribe en el caché de «carga abierta» a propósito (ver `cachearCargaAbierta_`).
-  `Index.html`: panel «Cargas activas» (`listarCargasPanel`, sin sondeo por el egress de Supabase) y
+  `Index.html`: panel de cargas (`listarCargasPanel`, sin sondeo por el egress de Supabase) y
   selector «¿Quién carga?» en el paso 1; el JS va entre las marcas `CARGAS ACTIVAS Y CARGADOR` y se
   prueba en `test/indexCargasPanel.test.js`. La llegada cruzada desde Carta de Portes SIE ya no abre la
   carga sola. `Pruebas.gs` usa un horario propio por ejecución para `obtenerOCrearCarga`.
+- **Pantalla del muelle en tres listas y cargas huérfanas (2026-10-15).** `listarCargasPanel()` devuelve
+  `{abiertas, cerradas, porRevisar}` y las tres NO se mezclan: arriba solo las abiertas con el camión sin llegar;
+  barras plegables «Cerradas» (entrega de hoy en adelante; reabribles hasta la llegada, luego solo consulta;
+  desaparecen al acabar su día de entrega) y «Por revisar» (abiertas con el camión ya llegado, hay que cerrarlas, y
+  abiertas REPETIDAS de un camión que ya tiene su carga). El reparto es `clasificarCargasPanel_` (pura, en
+  `Utilidades.gs`; un camión = `claveCamionCarga_`; manda `elegirCargaExistente_`). Lee los últimos
+  `DIAS_REVISION_CARGAS_` (7) días y solo `COLUMNAS_PANEL_CARGAS_`. `descartarCarga(idCarga)` pasa una carga ABIERTA
+  y VACÍA a `estado = 'DESCARTADA'` (sin informe; con mercancía se niega: hay que cerrarla); las DESCARTADAS no
+  cuentan como carga del camión (`elegirCargaExistente_` solo mira ABIERTA/CERRADA). Si la base tuviera un `CHECK`
+  sobre `cargas.estado` hay que migrarlo antes de usar «Descartar» (falla sin tocar nada). Tabla de «cuándo
+  desaparece cada carga» en el spec. Se comprobaron unas 100 mutaciones (servidor y pantalla): las pruebas fallan con cada una.
 - **Sin diálogos nativos del navegador (regla del usuario, 2026-10-15).** `Index.html` no usa `alert()`,
   `confirm()` ni `prompt()` (salen con la URL fea de googleusercontent.com): avisos con
   `mostrarModalAviso_(titulo, texto)` y confirmaciones con
