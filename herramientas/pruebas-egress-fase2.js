@@ -18,8 +18,17 @@
  * puede cambiar es QUÉ SE LEE. Después aplica MUTACIONES al código nuevo y
  * exige que el banco las detecte.
  *
+ * 2026-10-15: ampliado con el historial de lotes y los subtipos Taisa, que ahora los agrupa
+ * Postgres (RPC `historial_lotes` y `subtipos_taisa_usados`, migraciones/2026-10-15-*.sql). El
+ * simulador implementa esas dos RPC en JS con la semántica del SQL; que el SQL real la cumple lo
+ * comprueba herramientas/pruebas-egress-historial-sql.js contra Postgres de verdad (PGlite). Los
+ * datos sintéticos incluyen lotes con origen_texto distinto por fila (Antequera), empates de
+ * fecha entre lotes, subtipos fuera de la lista base y un subtipo en un origen que no es Taisa.
+ *
  * Uso:  node herramientas/pruebas-egress-fase2.js
  *       OLD_REF=7f81f28 SEMILLAS=60 node herramientas/pruebas-egress-fase2.js
+ *       # contra producción v100 (ya con la Fase 2): UMBRAL_BYTES=1 solo exige que los bytes no suban
+ *       OLD_REF=5ac0edc UMBRAL_BYTES=1 node herramientas/pruebas-egress-fase2.js
  *
  * No toca Supabase, Sheets ni Drive reales.
  */
@@ -152,6 +161,29 @@ function crearMotor(estado, registro) {
         let mx = T.etiquetas.reduce((a, e) => Math.max(a, Number(String(e.id_unico).replace('HODOS-', '')) || 0), 0);
         return resp(200, JSON.stringify(Array.from({ length: n }, () => 'HODOS-' + String(++mx).padStart(6, '0'))), {});
       }
+      // Lecturas agregadas en el servidor (migraciones/2026-10-15-*.sql). Aquí van en JS con la
+      // MISMA semántica que el SQL; que el SQL de verdad la cumple lo comprueba
+      // herramientas/pruebas-egress-historial-sql.js contra Postgres real (PGlite).
+      if (mRpc[1] === 'historial_lotes' || mRpc[1] === 'subtipos_taisa_usados') {
+        let filas;
+        if (mRpc[1] === 'historial_lotes') {
+          const p = JSON.parse(opts.payload || '{}').p_limite;
+          const limite = Math.max(p === null || p === undefined ? 10 : p, 1);
+          // primer registro de cada lote = el de menor (fecha_creacion, id_unico)
+          const antes = (a, b) => (Date.parse(a.fecha_creacion) - Date.parse(b.fecha_creacion)) || (a.id_unico < b.id_unico ? -1 : a.id_unico > b.id_unico ? 1 : 0);
+          const primeros = new Map(), cuenta = new Map();
+          T.etiquetas.forEach(e => { cuenta.set(e.lote_id, (cuenta.get(e.lote_id) || 0) + 1); const q = primeros.get(e.lote_id); if (!q || antes(e, q) < 0) primeros.set(e.lote_id, e); });
+          filas = Array.from(primeros.values()).sort((a, b) => antes(b, a)).slice(0, limite)
+            .map(e => ({ lote_id: e.lote_id, cantidad: cuenta.get(e.lote_id), origen_texto: e.origen_texto, destino: e.destino, fecha_creacion: e.fecha_creacion }));
+        } else {
+          // orden de primera aparición en la tabla (ctid) = el orden del array simulado
+          const vistos = new Set(); filas = [];
+          T.etiquetas.forEach(e => { if (e.origen === 'Taisa' && e.subtipo !== null && e.subtipo !== undefined && !vistos.has(e.subtipo)) { vistos.add(e.subtipo); filas.push({ subtipo: e.subtipo }); } });
+        }
+        const texto = JSON.stringify(filas);
+        registro[registro.length - 1].lectura = true; registro[registro.length - 1].filas = filas.length; registro[registro.length - 1].bytes = texto.length;
+        return resp(200, texto, {});
+      }
       throw new Error('RPC no simulada: ' + mRpc[1]);
     }
     const m = url.match(/\/rest\/v1\/([A-Za-z0-9_]+)(?:\?(.*))?$/);
@@ -244,7 +276,9 @@ function crearContexto(fuentes) {
 // ------------------------------------------------------- datos sintéticos
 const TIENDAS = ['Málaga', 'Marbella', 'Mijas', 'Granada'];
 const ORIGENES = ['Taisa', 'Cesión', 'MECO', 'Valencia', 'Torija', 'Antequera'];
-const SUBTIPOS = ['Devolución', 'Inventario', 'Petición Reserva', 'Pedido cliente'];
+// Los 4 primeros están en la lista base de obtenerSubtiposConocidos; el resto la amplían (como los
+// «SOBRANTE»/«Otros»/«ROTO» que ya hay en producción) y '' es un subtipo vacío (se ignora).
+const SUBTIPOS = ['Devolución', 'Inventario', 'Petición Reserva', 'Pedido cliente', 'SOBRANTE', 'Otros', 'ROTO', 'Cambio directo/Recogida', ''];
 
 function generarDatos(semilla, opciones) {
   opciones = opciones || {};
@@ -274,20 +308,29 @@ function generarDatos(semilla, opciones) {
     const ped = r() < 0.12 ? String(ent(100000, 999999)) + '+' + String(ent(100000, 999999)) : String(ent(100000, 999999));
     const total = r() < 0.7 ? 1 : ent(2, 4);
     const fecha = iso(T0 - (r() < 0.3 ? r() * 30 * H : r() * 12 * 24 * H));
-    const subtipo = origen === 'Taisa' ? el(SUBTIPOS) : null;
+    const subtipo = origen === 'Taisa' ? el(SUBTIPOS) : (r() < 0.04 ? 'ANOMALO' : null); // 'ANOMALO': subtipo en un origen que no es Taisa (no debe salir)
     const pend = r() < 0.12;
     for (let s = 1; s <= total; s++) {
       n++;
       const registrado = r() < 0.55;
       const carga = registrado ? null : el(cargas);
+      // Llegadas de Antequera: cada soporte lleva su pedido de proveedor en el origen_texto, así que
+      // las filas de UN lote pueden tener origen_texto distinto (16 de 2.418 lotes el 15/10).
+      const origenTexto = origen === 'Antequera' && r() < 0.7 ? 'ANTEQUERA · PED. PROV. ' + ent(81000000, 93999999) : origen.toUpperCase() + (subtipo ? ' - ' + subtipo.toUpperCase() : '');
       etiquetas.push({
         id_unico: 'HODOS-' + String(n).padStart(6, '0'), numero_pedido: ped, soporte_num: s, soporte_total: total, origen, subtipo,
-        origen_texto: origen.toUpperCase() + (subtipo ? ' - ' + subtipo.toUpperCase() : ''), destino, fecha_creacion: fecha, lote_id: 'lote-' + lote,
+        origen_texto: origenTexto, destino, fecha_creacion: fecha, lote_id: 'lote-' + lote,
         creado_por: r() < 0.3 ? 'INCPC · x' : 'a@b.com', estado: registrado ? 'REGISTRADO' : 'EN_RUTA', batea_id: carga ? carga.id_carga : null,
         fecha_envio: carga ? iso(T0 - r() * 5 * 24 * H) : null, origen_tienda: origen === 'Cesión' ? el(TIENDAS) : null,
         razon_flujo: r() < 0.1 ? 'Sobrante' : null, pendiente_impresion_incpc: pend ? true : (r() < 0.5 ? false : null), expedicion: r() < 0.2 ? 'EXP' + ent(1, 9) : null
       });
     }
+  }
+  // dos lotes con exactamente la misma fecha_creacion (empate entre lotes; sin esto, el orden del historial no se prueba)
+  const lotes = Array.from(new Set(etiquetas.map(e => e.lote_id)));
+  if (lotes.length > 6) {
+    const x = lotes[ent(0, lotes.length - 1)], y = lotes[ent(0, lotes.length - 1)];
+    if (x !== y) { const f = etiquetas.find(e => e.lote_id === x).fecha_creacion; etiquetas.forEach(e => { if (e.lote_id === y) e.fecha_creacion = f; }); }
   }
   // soportes de borde alrededor de la medianoche GMT+1 (23:00Z): para el filtro por fecha
   [-30, -1, 1, 30].forEach((min, k) => {
@@ -351,6 +394,13 @@ function escenarios(datos, semilla) {
   add('obtenerCarga(no existe)', c => c.obtenerCarga('CARGA-999999'));
   add('obtenerHistorialLotes()', c => c.obtenerHistorialLotes());
   add('obtenerHistorialLotes(3)', c => c.obtenerHistorialLotes(3));
+  // límites de verdad (el cliente manda 10; la prueba de humo, 5), el valor por defecto y los bordes
+  [1, 7, 25].forEach(n => add('obtenerHistorialLotes(' + n + ')', c => c.obtenerHistorialLotes(n)));
+  add('obtenerHistorialLotesMaximo(1000)', c => c.obtenerHistorialLotes(1000)); // el tope: sale aparte en el recuento porque lee casi todos los lotes
+  add('obtenerHistorialLotes(0)', c => c.obtenerHistorialLotes(0));
+  add('obtenerHistorialLotes(null)', c => c.obtenerHistorialLotes(null));
+  add("obtenerHistorialLotes('4')", c => c.obtenerHistorialLotes('4'));
+  add('obtenerSubtiposConocidos()', c => c.obtenerSubtiposConocidos());
   datos.cargas.filter(cg => cg.estado === 'ABIERTA').forEach(cg => {
     add('cerrarCarga(' + cg.id_carga + ')', c => c.cerrarCarga(cg.id_carga, false));
     add('cerrarCarga(' + cg.id_carga + ', forzar)', c => c.cerrarCarga(cg.id_carga, true));
@@ -375,10 +425,10 @@ function ejecutar(cx, datos, fn) {
   cx.registro.length = 0; cx.logs.length = 0; cx.efectos.length = 0;
   let ret;
   try { ret = JSON.stringify(fn(cx.ctx), reemplazo); } catch (e) { ret = 'ERROR: ' + e.message; }
-  const lect = cx.registro.filter(p => p.metodo === 'get');
+  const lect = cx.registro.filter(p => p.metodo === 'get' || p.lectura); // GET + RPC de solo lectura
   return {
     ret, db: JSON.stringify(cx.estado.tablas),
-    escrituras: JSON.stringify(cx.registro.filter(p => p.metodo !== 'get').map(p => [p.metodo, p.tabla, p.url, p.payload])),
+    escrituras: JSON.stringify(cx.registro.filter(p => p.metodo !== 'get' && !p.lectura).map(p => [p.metodo, p.tabla, p.url, p.payload])),
     logs: JSON.stringify(cx.logs), efectos: JSON.stringify(cx.efectos),
     reg: cx.registro.map(p => p.metodo + ' ' + p.tabla + ' ' + (p.url || '').slice(0, 100) + (p.filas !== undefined ? ' -> ' + p.filas : '')),
     filas: lect.reduce((s, p) => s + p.filas, 0), bytes: lect.reduce((s, p) => s + p.bytes, 0), peticiones: lect.length,
@@ -435,7 +485,17 @@ function main() {
     console.log('   ' + n.padEnd(46) + ' filas ' + String(f.filasV).padStart(8) + ' -> ' + String(f.filasN).padStart(7) + '   KB ' + String(Math.round(f.bytesV / 1024)).padStart(6) + ' -> ' + String(Math.round(f.bytesN / 1024)).padStart(5));
   });
   console.log('   TOTAL filas: ' + filasV + ' -> ' + filasN + ' (' + Math.round(100 * (1 - filasN / filasV)) + ' % menos) · bytes JSON: ' + Math.round(bytesV / 1024) + ' KB -> ' + Math.round(bytesN / 1024) + ' KB (' + Math.round(100 * (1 - bytesN / bytesV)) + ' % menos) · peticiones: ' + petV + ' -> ' + petN + ' · lecturas enteras de etiquetas: ' + enterasV + ' -> ' + enterasN);
-  ok(bytesN < bytesV * 0.4, 'los bytes leídos bajan más de un 60 %');
+  // Contra la base de la Fase 2 (7f81f28) se exige −60 %; contra una base que ya la incluye (p.ej. producción
+  // 5ac0edc, para el historial de lotes y los subtipos) solo que no suba: lo que baja ahí se ve en la sección 2.
+  const umbralBytes = Number(process.env.UMBRAL_BYTES || 0.4);
+  ok(bytesN < bytesV * umbralBytes, 'los bytes leídos bajan más de un ' + Math.round(100 * (1 - umbralBytes)) + ' %');
+  // Historial: del orden de la tabla entera a ≤10 filas por llamada (−98 % aquí; en producción 7.246 -> 10).
+  // Subtipos: de una fila por etiqueta Taisa a una por subtipo distinto (los datos sintéticos son pequeños:
+  // en producción 2.508 -> 26, −99 %).
+  [['obtenerHistorialLotes', 0.1], ['obtenerSubtiposConocidos', 0.25]].forEach(([accion, tope]) => {
+    const f = porNombre[accion + '(…)'];
+    if (f) ok(f.filasN <= f.filasV * tope && f.bytesN <= f.bytesV * tope, accion + ': filas ' + f.filasV + ' -> ' + f.filasN + ' y bytes ' + f.bytesV + ' -> ' + f.bytesN + ' (esperado: −' + Math.round(100 * (1 - tope)) + ' % o más)');
+  });
   ok(petN <= petV * 1.6, 'el nº de peticiones no se dispara (' + petV + ' -> ' + petN + ')');
 
   console.log('== 3. Mutaciones: el banco tiene que detectarlas ==');

@@ -48,8 +48,29 @@ module.exports = [
   ['cerrarCarga: sin la columna origen', 'Backend.gs', s => s
     .replace("'id_unico,numero_pedido,origen,origen_texto,destino,estado,batea_id,soporte_total,lote_id'", "'id_unico,numero_pedido,origen_texto,destino,estado,batea_id,soporte_total,lote_id'")],
   // --- otras
-  ['obtenerHistorialLotes: sin la columna destino', 'Backend.gs', s => s
-    .replace("'lote_id,origen_texto,destino,fecha_creacion'", "'lote_id,origen_texto,fecha_creacion'")],
+  // --- historial de lotes y subtipos (RPC en Postgres, migraciones/2026-10-15-*.sql)
+  ['obtenerHistorialLotes: pide un lote de más', 'Backend.gs', s => s
+    .replace("{ p_limite: n }", "{ p_limite: n + 1 }")],
+  ['obtenerHistorialLotes: ignora el límite pedido', 'Backend.gs', s => s
+    .replace("{ p_limite: n }", "{ p_limite: 10 }")],
+  ['obtenerHistorialLotes: pierde el destino al mapear', 'Backend.gs', s => s
+    .replace("destino: f.destino, fecha: fechaComoTexto(f.fecha_creacion)", "destino: '', fecha: fechaComoTexto(f.fecha_creacion)")],
+  ['obtenerHistorialLotes: cantidad siempre 1', 'Backend.gs', s => s
+    .replace("cantidad: f.cantidad,", "cantidad: 1,")],
+  ['obtenerHistorialLotes: pone la fecha de otro campo', 'Backend.gs', s => s
+    .replace("fecha: fechaComoTexto(f.fecha_creacion)", "fecha: fechaComoTexto(f.origen_texto)")],
+  ['obtenerHistorialLotes: el más antiguo primero', 'Backend.gs', s => s
+    .replace("return supaRpc_('historial_lotes', { p_limite: n }).map(", "return supaRpc_('historial_lotes', { p_limite: n }).reverse().map(")],
+  ['obtenerHistorialLotes: el tope baja de 1000 a 500', 'Backend.gs', s => s
+    .replace("|| 10, 1), 1000);", "|| 10, 1), 500);")],
+  ['obtenerHistorialLotes: el límite como texto («4») se ignora', 'Backend.gs', s => s
+    .replace("Math.floor(Number(limite)) || 10", "Math.floor(limite) === limite ? limite : 10")],
+  ['obtenerSubtiposConocidos: no descarta los de la lista base', 'EstructuraSheets.gs', s => s
+    .replace("if (s && !vistos[s] && todos.indexOf(s) === -1) {", "if (s && !vistos[s]) {")],
+  ['obtenerSubtiposConocidos: llama a la RPC del historial', 'EstructuraSheets.gs', s => s
+    .replace("supaRpc_('subtipos_taisa_usados', {})", "supaRpc_('historial_lotes', {})")],
+  ['obtenerSubtiposConocidos: solo el primer subtipo', 'EstructuraSheets.gs', s => s
+    .replace("var filas = supaRpc_('subtipos_taisa_usados', {});", "var filas = supaRpc_('subtipos_taisa_usados', {}).slice(0, 1);")],
   ['obtenerCarga: solo el contenido de la primera etiqueta', 'Backend.gs', s => s
     .replace("obtenerMapaContenidoDe_(filasEscaneadas.map(function (f) { return f.idUnico; }))", "obtenerMapaContenidoDe_(filasEscaneadas.slice(0, 1).map(function (f) { return f.idUnico; }))")],
   ['agruparSoportesAdmin: no lee el contenido de los originales', 'Backend.gs', s => s

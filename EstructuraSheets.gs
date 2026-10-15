@@ -94,7 +94,10 @@ function borrarEtiquetaCondicionalPorIdUnico_(idUnico, filtroExtra) {
 var OPCIONES_SUBTIPO_BASE_ = ['Devolución', 'Inventario', 'Demarca', 'Petición Reserva', 'Sobrante', 'Ean Erroneo', 'Anulado', 'Rotura', 'Pedido cliente'];
 
 function obtenerSubtiposConocidos() {
-  var filas = supaGet_('etiquetas', 'origen=eq.Taisa&subtipo=not.is.null', 'subtipo');
+  // Los subtipos distintos los calcula Postgres (función `subtipos_taisa_usados`,
+  // migraciones/2026-10-15-*.sql, en orden de primera aparición): antes se bajaba la columna
+  // `subtipo` de todas las etiquetas Taisa (2.508 filas en 3 viajes) para quedarse con ~26 valores.
+  var filas = supaRpc_('subtipos_taisa_usados', {});
   var vistos = {};
   var todos = OPCIONES_SUBTIPO_BASE_.slice();
   filas.forEach(function (f) {

@@ -141,20 +141,17 @@ function obtenerMapaCargasDe_(idsCarga) {
   return mapa;
 }
 
+// Los N lotes más recientes (el más reciente primero) con su cantidad de etiquetas y el
+// origen/destino/fecha de su primer registro. El agrupado lo hace Postgres (función
+// `historial_lotes`, migraciones/2026-10-15-*.sql): antes se bajaba TODA la tabla `etiquetas`
+// (7.246 filas en 8 viajes, ~35 veces al día) para quedarse con 10 lotes; ahora llegan ~10 filas.
 function obtenerHistorialLotes(limite) {
   limite = limite || 10;
-  // Solo las 4 columnas que usa el cálculo de abajo (el resto de la etiqueta no se descarga).
-  var filas = leerEtiquetas_('order=fecha_creacion.asc', 'lote_id,origen_texto,destino,fecha_creacion');
-  var porLote = {};
-  var orden = [];
-  filas.forEach(function (f) {
-    if (!porLote[f.loteId]) {
-      porLote[f.loteId] = { loteId: f.loteId, cantidad: 0, origenTexto: f.origenTexto, destino: f.destino, fecha: fechaComoTexto(f.fechaCreacion) };
-      orden.push(f.loteId);
-    }
-    porLote[f.loteId].cantidad++;
+  // Tope 1000 = Max Rows de PostgREST: supaRpc_ no pagina y una respuesta mayor se cortaría en silencio.
+  var n = Math.min(Math.max(Math.floor(Number(limite)) || 10, 1), 1000);
+  return supaRpc_('historial_lotes', { p_limite: n }).map(function (f) {
+    return { loteId: f.lote_id, cantidad: f.cantidad, origenTexto: f.origen_texto, destino: f.destino, fecha: fechaComoTexto(f.fecha_creacion) };
   });
-  return orden.slice(-limite).reverse().map(function (id) { return porLote[id]; });
 }
 
 // ── Generación del HTML de etiquetas para impresión (siempre en servidor: ver
