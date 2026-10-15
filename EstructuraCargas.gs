@@ -12,7 +12,11 @@ function filaCargaDesdeSupabase_(f) {
     cerradaPor: f.cerrada_por,
     fechaCierre: f.fecha_cierre,
     pdfUrl: f.pdf_url,
-    emailEnviado: f.email_enviado
+    emailEnviado: f.email_enviado,
+    cargador: f.cargador,
+    reabiertaPor: f.reabierta_por,
+    reabiertaEn: f.reabierta_en,
+    b2bConteo: f.b2b_conteo
   };
 }
 
@@ -28,6 +32,10 @@ function filaCargaHaciaSupabase_(obj) {
   if (obj.fechaCierre !== undefined) fila.fecha_cierre = obj.fechaCierre;
   if (obj.pdfUrl !== undefined) fila.pdf_url = obj.pdfUrl;
   if (obj.emailEnviado !== undefined) fila.email_enviado = obj.emailEnviado;
+  if (obj.cargador !== undefined) fila.cargador = obj.cargador;
+  if (obj.reabiertaPor !== undefined) fila.reabierta_por = obj.reabiertaPor;
+  if (obj.reabiertaEn !== undefined) fila.reabierta_en = obj.reabiertaEn;
+  if (obj.b2bConteo !== undefined) fila.b2b_conteo = obj.b2bConteo;
   return fila;
 }
 

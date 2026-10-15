@@ -356,6 +356,23 @@ implementadas: Módulo 1 (carga por lote + etiquetas), Cabecera+Buscadores, Fase
       `bloqueSie` con `okCount`/`nokCount`.
   Todo lo de esta entrada verificado con `node --test test/` en verde (240 tests) tras
   cada cambio. Pendiente de `clasp push -f` — no incluido en este pase, a confirmar.
+- **Un camión = una carga, cargador obligatorio y reapertura (2026-10-15).** Spec:
+  `docs/superpowers/specs/2026-10-15-cargas-panel-cargador-reapertura-design.md`. Un camión se
+  identifica por destino+fecha+horario y tiene UNA carga para siempre: `obtenerOCrearCarga` busca en
+  cualquier estado (abierta → la continúa; cerrada y aún no ha llegado → devuelve `{cerrada, reabrible}`
+  para que la pantalla pida confirmar y llame a `reabrirCarga`; cerrada y ya llegó → solo avisa, no crea
+  otra). Hora de llegada = fecha+horario en hora de Madrid (`fechaLlegadaCarga_`, `Utilidades.gs`).
+  Abrir/reabrir exige 1-2 cargadores de la lista de Cargas/Descargas (copia en `Utilidades.gs`, vigilada
+  por `test/cargasReapertura.test.js`; `obtenerCargadores()` la sirve a la pantalla). Columnas nuevas de
+  `cargas` (`cargador`, `reabierta_por`, `reabierta_en`, `b2b_conteo`): migración
+  `docs/migraciones/2026-10-15-cargas-cargador-reapertura.sql`, que hay que aplicar ANTES de desplegar
+  (la apertura escribe `cargador`: sin la columna, abrir una carga falla). Al cerrar otra vez una carga
+  reabierta: asunto y franja «ACTUALIZADO» y, al B2B de Leroy Merlin, solo la diferencia (`b2b_conteo`).
+  `reabrirCarga` NO escribe en el caché de «carga abierta» a propósito (ver `cachearCargaAbierta_`).
+  `Index.html`: panel «Cargas activas» (`listarCargasPanel`, sin sondeo por el egress de Supabase) y
+  selector «¿Quién carga?» en el paso 1; el JS va entre las marcas `CARGAS ACTIVAS Y CARGADOR` y se
+  prueba en `test/indexCargasPanel.test.js`. La llegada cruzada desde Carta de Portes SIE ya no abre la
+  carga sola. `Pruebas.gs` usa un horario propio por ejecución para `obtenerOCrearCarga`.
 
 ## Estructura
 
@@ -367,8 +384,8 @@ implementadas: Módulo 1 (carga por lote + etiquetas), Cabecera+Buscadores, Fase
   una carga, normalización de líneas de contenido)
 - `Barcode.gs` — encoder CODE128-B propio, sin CDN
 - `Backend.gs` — `doGet` (con plantilla), `registrarLote`, `htmlEtiquetas`,
-  `buscarEtiquetas`, `crearCarga`, `listarCargasAbiertas`, `obtenerCarga`,
-  `escanearSoporte`, `cerrarCarga`, `guardarContenidoSoporte`
+  `buscarEtiquetas`, `crearCarga`, `listarCargasAbiertas`, `obtenerOCrearCarga`, `reabrirCarga`,
+  `listarCargasPanel`, `obtenerCarga`, `escanearSoporte`, `cerrarCarga`, `guardarContenidoSoporte`
 - `ReporteCarga.gs` — `htmlInformeCarga` (informe de cierre, estilo Carta de Portes)
 - `ConfigEntregas.gs` — destinatarios/horarios de entrega por tienda
 - `Index.html` — UI (3 temas, 4 vistas: carga/interno/tienda/camión, shell responsive)

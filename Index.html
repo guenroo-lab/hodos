@@ -325,6 +325,57 @@
     .fecha-chip.sel::before { content:'✓ '; }
     .fecha-chip.fecha-chip-otra { border-style:dashed; }
 
+    /* ── Cargas activas y cargador (Cargar camión, paso 1) — 2026-10-15 ── */
+    .carga-panel { margin-bottom:22px; padding:20px; }
+    .carga-panel-titulo { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+    .carga-panel-lista { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap:12px; }
+    .carga-panel-lista .sin-resultados, .carga-panel-lista .aviso-error { grid-column:1 / -1; padding:14px; margin:0; text-align:center; }
+    .carga-card {
+      display:flex; flex-direction:column; align-items:stretch; gap:6px; text-align:left; min-height:44px;
+      padding:12px 14px; border-radius:10px; border:1px solid var(--input-border); border-left:6px solid var(--input-border);
+      background:var(--input-bg); color:var(--text-primary); font-size:13px; cursor:pointer;
+    }
+    .carga-card:hover { border-color:var(--color-accent); }
+    /* Los mismos colores por tienda que los botones de tienda de más abajo. */
+    .carga-card.tienda-malaga   { border-left-color:#22c55e; }
+    .carga-card.tienda-marbella { border-left-color:#3498db; }
+    .carga-card.tienda-mijas    { border-left-color:#9b59b6; }
+    .carga-card.tienda-granada  { border-left-color:#f39c12; }
+    .carga-card-cab { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 10px; }
+    .carga-card-tienda { font-size:16px; font-weight:800; }
+    .carga-card-hora { font-size:16px; font-weight:800; color:var(--color-accent-text); }
+    .carga-card-dia { font-size:12px; opacity:0.75; font-weight:600; margin-left:auto; }
+    .carga-card-estado { align-self:flex-start; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:0.4px; }
+    .carga-card-estado.est-abierta { background:#147638; color:#fff; }
+    .carga-card-estado.est-vencida { background:#e67e22; color:#fff; }
+    .carga-card-estado.est-cerrada { background:var(--bg-panel); border:1px solid var(--input-border); color:var(--text-primary); }
+    .carga-card-cifras, .carga-card-cargador { font-size:12.5px; opacity:0.9; overflow-wrap:anywhere; }
+    .carga-card-pie { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:2px; }
+    .carga-card-id { font-size:11px; opacity:0.65; }
+    .carga-card-accion { font-size:12.5px; font-weight:800; color:var(--color-accent-text); white-space:nowrap; }
+
+    .cargador-grupo { grid-column:1 / -1; }
+    .cargador-ayuda { font-weight:400; opacity:0.75; margin-left:6px; }
+    .cargador-chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+    /* Dentro de .busqueda-form todo <button> hereda el estilo del botón principal (".busqueda-form button"): así
+       salen también los chips de fecha. Los chips de cargador se quedan con ese mismo aspecto (más compactos) y
+       solo cambian al estar elegidos: verde = "elegido", igual que los chips de fecha. */
+    .busqueda-form .cargador-chip { display:inline-flex; width:auto; padding:10px 16px; font-size:13px; }
+    .busqueda-form .cargador-chip[aria-pressed="true"] { background:#147638; box-shadow:0 3px 10px rgba(20,118,56,0.5); }
+    .busqueda-form .cargador-chip[aria-pressed="true"]::before { content:'✓'; }
+    .busqueda-form button.btn-link { display:inline-flex; width:auto; min-height:0; padding:6px 4px; background:none; color:var(--color-accent-text); font-size:12.5px; border-radius:6px; }
+    .busqueda-form #btnAbrirCarga { grid-column:1 / -1; }
+    .cargador-aux { max-height:190px; overflow-y:auto; padding:10px; margin-bottom:8px; border:1px dashed var(--input-border); border-radius:10px; }
+    .cargador-chips.necesario { outline:2px solid var(--color-error); outline-offset:4px; border-radius:10px; }
+    .cargador-resumen { min-height:18px; margin:6px 0 0; font-size:12.5px; }
+    .cargador-resumen.error { color:var(--color-error); font-weight:700; }
+    .camion-volver { margin:-8px 0 8px -4px; }
+    .camion-cargador-linea { margin:-6px 0 12px; font-size:13px; font-weight:600; }
+    .aviso-reapertura {
+      margin:0 0 14px; padding:10px 14px; border-radius:8px; font-size:13px; line-height:1.5;
+      background:rgba(230,126,34,0.14); border:1px solid #e67e22; color:var(--text-primary);
+    }
+
     /* ── Modo manual en el escaneo (Cargar camión) ── */
     .btn-modo-manual.activo { background:var(--color-accent); border-color:var(--color-accent); color:var(--on-accent); }
 
@@ -893,6 +944,16 @@
         <div class="paso" data-paso="3"><div class="num">3</div><div class="etiqueta">Cerrar</div></div>
       </div>
       <div id="camionPaso1">
+        <!-- Cargas activas (2026-10-15): camiones con carga abierta ahora y cargas cerradas que aún se pueden reabrir.
+             Un camión (tienda + fecha + horario) tiene UNA sola carga: pulsar una tarjeta rellena el formulario de abajo. -->
+        <div class="section carga-panel" id="camionPanel">
+          <h2 class="carga-panel-titulo">
+            <span>Cargas activas <span class="pendientes-contador" id="camionPanelContador"></span></span>
+            <button type="button" class="btn-link" id="btnPanelActualizar" onclick="cargarPanelCargas_()" title="Actualizar">Actualizar</button>
+          </h2>
+          <div class="carga-panel-lista" id="camionPanelLista"><p class="sin-resultados">Cargando…</p></div>
+        </div>
+        <p class="hint-texto vista-oculta" id="camionContextoAviso"></p>
         <label>Tienda destino</label>
         <div class="tienda-selector" id="camionTiendaSelector">
           <button type="button" class="tienda-btn tienda-malaga" data-tienda="Málaga" onclick="seleccionarTiendaCamion_('Málaga')">
@@ -915,13 +976,23 @@
           <input type="date" id="camionFecha" class="vista-oculta" style="margin-top:8px;">
         </div>
         <div class="form-group"><label>Horario</label><select id="camionHorario"></select></div>
-        <button onclick="crearCargaUI()">Abrir carga</button>
+        <div class="form-group cargador-grupo" id="camionCargadorGrupo">
+          <label>¿Quién carga? <span class="cargador-ayuda">Elige a 1 o 2 personas</span></label>
+          <div class="cargador-chips" id="camionCargadorChips"><p class="sin-resultados" style="padding:6px 0;">Cargando…</p></div>
+          <button type="button" class="btn-link" id="btnCargadorMas" onclick="alternarCargadoresAux_()">+ Más cargadores</button>
+          <div class="cargador-aux cargador-chips vista-oculta" id="camionCargadorAux"></div>
+          <p class="cargador-resumen" id="camionCargadorResumen"></p>
+        </div>
+        <button id="btnAbrirCarga" onclick="crearCargaUI()">Abrir carga</button>
         </div>
       </div>
 
       <div id="camionPaso2" class="vista-oculta">
         <div class="section" style="margin-bottom:20px;">
+          <button type="button" class="btn-link camion-volver" onclick="volverAlPanel_(false)" title="Volver a la lista de cargas sin cerrar esta">← Cargas activas</button>
           <h2 id="camionTitulo"></h2>
+          <p class="camion-cargador-linea" id="camionCargadorLinea"></p>
+          <div class="aviso-reapertura vista-oculta" id="camionAvisoReapertura"></div>
           <div id="camionBadgePrueba" class="vista-oculta" style="display:inline-block;background:#e30613;color:#fff;font-size:11px;font-weight:700;letter-spacing:0.5px;padding:4px 10px;border-radius:4px;margin-bottom:12px;">MODO PRUEBA — no se enviará ningún email al cerrar</div>
           <div class="form-group">
             <label>Escanea aquí (lector de código de barras)</label>
@@ -944,6 +1015,7 @@
         <div class="section">
           <h2>Carga cerrada</h2>
           <div id="camionResumen"></div>
+          <button type="button" class="btn-secundario" id="btnVolverInicio" onclick="volverAlPanel_(true)" style="margin-top:16px;">Volver al inicio</button>
         </div>
       </div>
     </div>
@@ -2526,47 +2598,344 @@
     });
   }
 
+  // ══ CARGAS ACTIVAS Y CARGADOR: inicio ══
+  // Pantalla principal del muelle (2026-10-15). Un camión (tienda + fecha + horario) tiene UNA sola carga: si ya
+  // existe abierta se continúa; si está cerrada y el camión aún no ha llegado se puede reabrir (con confirmación)
+  // y si ya llegó no se toca. Abrir o reabrir exige indicar quién carga (1 o 2 personas de la lista de
+  // Cargas/Descargas, que sirve el servidor). El panel no se refresca solo: cada lectura cuesta egress de
+  // Supabase, así que se actualiza al entrar, al volver a esta pantalla y con el botón «Actualizar».
+  var CARGADORES_ = { principales: [], auxiliares: [], max: 2 };
+  var cargadoresSeleccionados_ = [];
+  var panelPeticion_ = 0;
+  var abriendoCarga_ = false;
+
+  function mensajeError_(err) {
+    return err && err.message ? err.message : String(err);
+  }
+
+  // Añade o quita a una persona de la selección. `rechazado` = ya hay `max` personas y se intentó añadir otra.
+  function alternarSeleccionCargador_(actual, nombre, max) {
+    var i = actual.indexOf(nombre);
+    if (i !== -1) return { lista: actual.slice(0, i).concat(actual.slice(i + 1)), rechazado: false };
+    if (actual.length >= max) return { lista: actual.slice(), rechazado: true };
+    return { lista: actual.concat([nombre]), rechazado: false };
+  }
+
+  function cargadoresElegidos_() {
+    return cargadoresSeleccionados_.slice();
+  }
+
+  function chipCargadorHtml_(nombre) {
+    var elegido = cargadoresSeleccionados_.indexOf(nombre) !== -1;
+    return '<button type="button" class="cargador-chip" data-nombre="' + escapeHtml_(nombre) + '" aria-pressed="' + (elegido ? 'true' : 'false') + '">' + escapeHtml_(nombre) + '</button>';
+  }
+
+  function textoResumenCargadores_() {
+    return cargadoresSeleccionados_.length
+      ? 'Cargan: ' + cargadoresSeleccionados_.join(' y ')
+      : 'Toca tu nombre. Si cargáis dos personas, elige a las dos.';
+  }
+
+  function pintarResumenCargadores_(error) {
+    var el = document.getElementById('camionCargadorResumen');
+    el.classList.toggle('error', !!error);
+    el.textContent = error || textoResumenCargadores_();
+  }
+
+  function marcarChipsCargadores_() {
+    document.querySelectorAll('#camionCargadorGrupo .cargador-chip').forEach(function (b) {
+      b.setAttribute('aria-pressed', cargadoresSeleccionados_.indexOf(b.getAttribute('data-nombre')) !== -1 ? 'true' : 'false');
+    });
+  }
+
+  function pintarCargadores_() {
+    document.getElementById('camionCargadorChips').innerHTML = CARGADORES_.principales.map(chipCargadorHtml_).join('');
+    document.getElementById('camionCargadorAux').innerHTML = CARGADORES_.auxiliares.map(chipCargadorHtml_).join('');
+    pintarResumenCargadores_('');
+  }
+
+  function cargarCargadores_() {
+    gas('obtenerCargadores').then(function (lista) {
+      CARGADORES_ = lista;
+      pintarCargadores_();
+    }).catch(function (err) {
+      document.getElementById('camionCargadorChips').innerHTML =
+        '<p class="aviso-error">No se pudo cargar la lista de personas (' + escapeHtml_(mensajeError_(err)) + '). ' +
+        '<button type="button" class="btn-link" onclick="cargarCargadores_()">Reintentar</button></p>';
+    });
+  }
+
+  function alternarCargadoresAux_() {
+    var oculto = document.getElementById('camionCargadorAux').classList.toggle('vista-oculta');
+    document.getElementById('btnCargadorMas').textContent = oculto ? '+ Más cargadores' : '− Menos cargadores';
+  }
+
+  function alPulsarCargador_(ev) {
+    var chip = ev.target && ev.target.closest ? ev.target.closest('.cargador-chip') : null;
+    if (!chip) return;
+    var max = CARGADORES_.max || 2;
+    var r = alternarSeleccionCargador_(cargadoresSeleccionados_, chip.getAttribute('data-nombre'), max);
+    if (r.rechazado) {
+      pintarResumenCargadores_('Máximo ' + max + ' personas por carga: quita a alguien antes de añadir a otra.');
+      return;
+    }
+    cargadoresSeleccionados_ = r.lista;
+    marcarChipsCargadores_();
+    pintarResumenCargadores_('');
+    document.getElementById('camionCargadorChips').classList.remove('necesario');
+  }
+
+  document.getElementById('camionCargadorGrupo').addEventListener('click', alPulsarCargador_);
+
+  var DIAS_SEMANA_CARGA_ = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+  // Días de diferencia entre dos fechas yyyy-MM-dd (positivo = la primera es posterior a la segunda).
+  function diasEntreFechas_(a, b) {
+    var pa = String(a).split('-');
+    var pb = String(b).split('-');
+    return Math.round((Date.UTC(Number(pa[0]), Number(pa[1]) - 1, Number(pa[2])) - Date.UTC(Number(pb[0]), Number(pb[1]) - 1, Number(pb[2]))) / 86400000);
+  }
+
+  // «Hoy», «Mañana», «Ayer» o «Sáb 17/10».
+  function etiquetaDiaCarga_(fecha, hoy) {
+    var d = diasEntreFechas_(fecha, hoy);
+    if (d === 0) return 'Hoy';
+    if (d === 1) return 'Mañana';
+    if (d === -1) return 'Ayer';
+    var p = String(fecha).split('-');
+    var diaSemana = DIAS_SEMANA_CARGA_[new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]))).getUTCDay()];
+    return diaSemana + ' ' + p[2] + '/' + p[1];
+  }
+
+  function textoCifrasCarga_(c) {
+    var s = Number(c.soportes) || 0;
+    var p = Number(c.palets) || 0;
+    var texto = s + (s === 1 ? ' soporte' : ' soportes');
+    if (p > 0) texto += ' · ' + p + (p === 1 ? ' palet SIE' : ' palets SIE');
+    return texto;
+  }
+
+  // Cómo se ve cada carga en el panel. «Pasó su hora» = abierta cuyo camión ya debería haber llegado (se les
+  // ha olvidado cerrarla o sigue cargando con retraso): se ve de lejos para que no se quede abierta sin querer.
+  function estadoVisualCarga_(c) {
+    if (c.estado === 'ABIERTA') {
+      return c.vencida
+        ? { clase: 'est-vencida', texto: 'ABIERTA · PASÓ SU HORA', accion: 'Continuar ›' }
+        : { clase: 'est-abierta', texto: 'ABIERTA', accion: 'Continuar ›' };
+    }
+    return { clase: 'est-cerrada', texto: 'CERRADA', accion: 'Reabrir ›' };
+  }
+
+  function tarjetaCargaHtml_(c, hoy) {
+    var est = estadoVisualCarga_(c);
+    var slug = TIENDA_SLUG_[c.destino] || 'otra';
+    return '<button type="button" class="carga-card tienda-' + slug + '" data-destino="' + escapeHtml_(c.destino) +
+      '" data-fecha="' + escapeHtml_(c.fechaEntrega) + '" data-horario="' + escapeHtml_(c.horario) + '">' +
+      '<span class="carga-card-cab"><span class="carga-card-tienda">' + escapeHtml_(c.destino) + '</span>' +
+      '<span class="carga-card-hora">' + escapeHtml_(c.horario) + '</span>' +
+      '<span class="carga-card-dia">' + escapeHtml_(etiquetaDiaCarga_(c.fechaEntrega, hoy)) + '</span></span>' +
+      '<span class="carga-card-estado ' + est.clase + '">' + est.texto + (c.reabierta ? ' · REABIERTA' : '') + '</span>' +
+      '<span class="carga-card-cifras">' + textoCifrasCarga_(c) + '</span>' +
+      '<span class="carga-card-cargador">' + (c.cargador ? '👷 ' + escapeHtml_(c.cargador) : 'Sin cargador anotado') + '</span>' +
+      '<span class="carga-card-pie"><span class="carga-card-id">' + escapeHtml_(c.idCarga) + '</span>' +
+      '<span class="carga-card-accion">' + est.accion + '</span></span></button>';
+  }
+
+  function pintarPanelCargas_(lista) {
+    var abiertas = lista.filter(function (c) { return c.estado === 'ABIERTA'; }).length;
+    document.getElementById('camionPanelContador').textContent = lista.length ? '(' + abiertas + (abiertas === 1 ? ' abierta' : ' abiertas') + ')' : '';
+    var cont = document.getElementById('camionPanelLista');
+    if (!lista.length) {
+      cont.innerHTML = '<p class="sin-resultados">No hay ninguna carga abierta ahora mismo. Elige tienda, fecha y horario para abrir una.</p>';
+      return;
+    }
+    var hoy = fechaComoValorInput_(new Date());
+    cont.innerHTML = lista.map(function (c) { return tarjetaCargaHtml_(c, hoy); }).join('');
+  }
+
+  function cargarPanelCargas_() {
+    var miPeticion = ++panelPeticion_;
+    var boton = document.getElementById('btnPanelActualizar');
+    boton.disabled = true;
+    boton.textContent = 'Actualizando…';
+    gas('listarCargasPanel').then(function (lista) {
+      if (miPeticion === panelPeticion_) pintarPanelCargas_(lista);
+    }).catch(function (err) {
+      if (miPeticion !== panelPeticion_) return;
+      document.getElementById('camionPanelContador').textContent = '';
+      document.getElementById('camionPanelLista').innerHTML =
+        '<p class="aviso-error">No se pudo cargar la lista de cargas: ' + escapeHtml_(mensajeError_(err)) + '</p>';
+    }).then(function () {
+      if (miPeticion !== panelPeticion_) return;
+      boton.disabled = false;
+      boton.textContent = 'Actualizar';
+    });
+  }
+
+  // Deja el formulario del paso 1 con ese camión (tienda + fecha + horario) y lleva la vista al selector de cargador.
+  function rellenarFormularioCamion_(destino, fecha, horario) {
+    marcarTiendaCamionSeleccionada_(destino);
+    return poblarHorarios_().then(function () {
+      var sel = document.getElementById('camionHorario');
+      var existe = Array.prototype.some.call(sel.options, function (o) { return o.value === horario; });
+      if (!existe) sel.insertAdjacentHTML('beforeend', '<option value="' + escapeHtml_(horario) + '">' + escapeHtml_(horario) + '</option>');
+      sel.value = horario;
+      document.getElementById('camionFecha').value = fecha;
+      marcarChipSeleccionado_(fecha);
+      document.getElementById('camionCargadorGrupo').scrollIntoView({ block: 'center' });
+    });
+  }
+
+  document.getElementById('camionPanelLista').addEventListener('click', function (ev) {
+    var tarjeta = ev.target && ev.target.closest ? ev.target.closest('.carga-card') : null;
+    if (!tarjeta) return;
+    rellenarFormularioCamion_(tarjeta.getAttribute('data-destino'), tarjeta.getAttribute('data-fecha'), tarjeta.getAttribute('data-horario'));
+  });
+
+  // Llegada cruzada desde Carta de Portes SIE (?vista=operario&tienda=…&fecha=…&horario=…): el formulario queda
+  // relleno con ese camión, pero la carga ya no se abre sola: hace falta indicar quién carga.
+  function mostrarAvisoContexto_(destino, horario) {
+    var el = document.getElementById('camionContextoAviso');
+    el.textContent = 'Vienes de Carta de Portes SIE con ' + destino + ' · ' + horario + '. Elige quién carga y pulsa «Abrir carga» para continuar con esa carga.';
+    el.classList.remove('vista-oculta');
+  }
+
+  function ponerAbriendoCarga_(abriendo) {
+    abriendoCarga_ = abriendo;
+    document.getElementById('btnAbrirCarga').disabled = abriendo;
+  }
+
   function crearCargaUI() {
     var destino = camionDestinoSeleccionado;
     var fecha = document.getElementById('camionFecha').value;
     var horario = document.getElementById('camionHorario').value;
-    if (!destino) { alert('Elige una tienda destino'); return; }
-    if (!fecha) { alert('Elige una fecha de entrega'); return; }
-    if (!horario) { alert('No hay horario seleccionable para ' + destino + ' (falta configurar)'); return; }
-    abrirCargaDirecta_(destino, fecha, horario);
+    if (!destino) { mostrarModalAviso_('Falta la tienda', 'Elige la tienda destino de la carga.'); return; }
+    if (!fecha) { mostrarModalAviso_('Falta la fecha', 'Elige la fecha de entrega.'); return; }
+    if (!horario) { mostrarModalAviso_('Falta el horario', 'No hay horario seleccionable para ' + destino + ' (falta configurar).'); return; }
+    var cargadores = cargadoresElegidos_();
+    if (cargadores.length === 0) {
+      document.getElementById('camionCargadorChips').classList.add('necesario');
+      mostrarModalAviso_('¿Quién carga?', 'Elige quién realiza la carga (1 o 2 personas de la lista) antes de abrirla.');
+      return;
+    }
+    abrirCargaDirecta_(destino, fecha, horario, cargadores);
   }
 
-  function abrirCargaDirecta_(destino, fecha, horario) {
-    // Compartida entre el flujo manual (Paso 1) y la llegada cruzada desde Carta de
-    // Portes SIE (vista operario): usa obtenerOCrearCarga para "seguir" una carga ya
-    // abierta con el mismo destino+fecha+horario en vez de duplicarla.
-    gas('obtenerOCrearCarga', destino, fecha, horario).then(function (r) {
-      cargaActualId = r.idCarga;
-      paletesSsccCargaActual_ = [];
-      renderizarListaPalets_();
-      document.getElementById('camionPaso1').classList.add('vista-oculta');
-      document.getElementById('camionPaso2').classList.remove('vista-oculta');
-      actualizarStepper_(2);
-      document.getElementById('camionTitulo').textContent =
-        r.idCarga + ' — ' + destino + ' ' + fecha + ' ' + horario + (r.reutilizada ? ' (continuando)' : '');
-      var input = document.getElementById('camionEscaneo');
-      input.value = '';
-      input.focus();
-      modoManualActivo_ = false;
-      document.getElementById('btnModoManual').classList.remove('activo');
-      document.getElementById('btnAnadirManual').classList.add('vista-oculta');
-      input.placeholder = 'Esperando lectura...';
-      gas('modoPruebaActivo').then(function (activo) {
-        document.getElementById('camionBadgePrueba').classList.toggle('vista-oculta', !activo);
-      });
-      // Si se reutiliza una carga ya empezada, mostrar lo que ya se había escaneado.
-      gas('obtenerCarga', cargaActualId).then(function (c) { renderizarListaCamion_(c.escaneados); });
-      gas('obtenerPaletesCarga', cargaActualId).then(function (sscc) {
-        paletesSsccCargaActual_ = sscc;
-        renderizarListaPalets_();
-      });
-    }).catch(function (err) { alert('Error al abrir la carga: ' + err.message); });
+  function abrirCargaDirecta_(destino, fecha, horario, cargadores) {
+    // Un solo camino para abrir una carga: el formulario del paso 1 y las tarjetas del panel acaban aquí.
+    // obtenerOCrearCarga "sigue" la carga abierta del camión (mismo destino+fecha+horario) en vez de duplicarla
+    // y, si ya está cerrada, no crea otra: devuelve {cerrada:true} para pedir la reapertura o avisar.
+    if (abriendoCarga_) return;
+    ponerAbriendoCarga_(true);
+    gas('obtenerOCrearCarga', destino, fecha, horario, cargadores).then(function (r) {
+      if (r.cerrada) { resolverCargaCerrada_(r, cargadores); return; }
+      entrarEnCarga_(r.idCarga, destino, fecha, horario, r.reutilizada ? ' (continuando)' : '');
+    }).catch(function (err) {
+      mostrarModalAviso_('No se pudo abrir la carga', mensajeError_(err));
+    }).then(function () {
+      ponerAbriendoCarga_(false);
+    });
   }
+
+  // El camión ya tiene una carga CERRADA: antes de su hora de llegada se puede reabrir (para añadir o quitar
+  // mercancía); después ya no se modifica. En ningún caso se crea otra carga para el mismo camión.
+  function resolverCargaCerrada_(r, cargadores) {
+    var camion = 'La carga ' + r.idCarga + ' de ' + r.destino + ' (' + r.textoLlegada + ')';
+    if (!r.reabrible) {
+      mostrarModalAviso_('Carga ya cerrada', camion + ' ya está cerrada y su camión ya ha llegado, así que ya no se puede modificar.\n\nTampoco se crea otra carga para el mismo camión.');
+      return;
+    }
+    var quien = r.cerradaPor ? ' (la cerró ' + r.cerradaPor + ')' : '';
+    mostrarConfirmacion_(
+      camion + ' ya está cerrada' + quien + '.\n\n¿Quieres reabrirla para añadir o quitar mercancía? Se puede hasta que llegue el camión. Al volver a cerrarla se enviará el informe actualizado.',
+      function () {
+        ponerAbriendoCarga_(true);
+        gas('reabrirCarga', r.idCarga, cargadores).then(function () {
+          entrarEnCarga_(r.idCarga, r.destino, r.fechaEntrega, r.horario, ' (reabierta)');
+        }).catch(function (err) {
+          mostrarModalAviso_('No se pudo reabrir la carga', mensajeError_(err));
+        }).then(function () {
+          ponerAbriendoCarga_(false);
+        });
+      },
+      'Reabrir carga',
+      'Reabrir'
+    );
+  }
+
+  function formatearFechaHora_(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var dos = function (n) { return n < 10 ? '0' + n : String(n); };
+    return dos(d.getDate()) + '/' + dos(d.getMonth() + 1) + ' ' + dos(d.getHours()) + ':' + dos(d.getMinutes());
+  }
+
+  // Quién carga y, si la carga se reabrió, la franja que lo recuerda (el informe que se envíe al cerrarla
+  // sustituirá al anterior).
+  function pintarCabeceraCarga_(c) {
+    document.getElementById('camionCargadorLinea').textContent = c.cargador ? 'Cargador: ' + c.cargador : '';
+    var aviso = document.getElementById('camionAvisoReapertura');
+    if (c.reabierta) {
+      var cuando = c.reabiertaEn ? formatearFechaHora_(c.reabiertaEn) : '';
+      aviso.textContent = 'Carga reabierta' + (cuando ? ' el ' + cuando : '') + '. Puedes añadir o quitar mercancía; al volver a cerrarla se enviará el informe actualizado.';
+      aviso.classList.remove('vista-oculta');
+    } else {
+      aviso.classList.add('vista-oculta');
+    }
+  }
+
+  function entrarEnCarga_(idCarga, destino, fecha, horario, sufijoTitulo) {
+    cargaActualId = idCarga;
+    marcarTiendaCamionSeleccionada_(destino);
+    paletesSsccCargaActual_ = [];
+    renderizarListaPalets_();
+    document.getElementById('camionPaso1').classList.add('vista-oculta');
+    document.getElementById('camionPaso3').classList.add('vista-oculta');
+    document.getElementById('camionPaso2').classList.remove('vista-oculta');
+    actualizarStepper_(2);
+    document.getElementById('camionTitulo').textContent =
+      idCarga + ' — ' + destino + ' ' + fecha + ' ' + horario + (sufijoTitulo || '');
+    document.getElementById('camionCargadorLinea').textContent = '';
+    document.getElementById('camionAvisoReapertura').classList.add('vista-oculta');
+    var input = document.getElementById('camionEscaneo');
+    input.value = '';
+    input.focus();
+    modoManualActivo_ = false;
+    document.getElementById('btnModoManual').classList.remove('activo');
+    document.getElementById('btnAnadirManual').classList.add('vista-oculta');
+    input.placeholder = 'Esperando lectura...';
+    gas('modoPruebaActivo').then(function (activo) {
+      document.getElementById('camionBadgePrueba').classList.toggle('vista-oculta', !activo);
+    });
+    // Si se reutiliza una carga ya empezada, mostrar lo que ya se había escaneado.
+    gas('obtenerCarga', idCarga).then(function (c) {
+      renderizarListaCamion_(c.escaneados);
+      pintarCabeceraCarga_(c);
+    });
+    gas('obtenerPaletesCarga', idCarga).then(function (sscc) {
+      paletesSsccCargaActual_ = sscc;
+      renderizarListaPalets_();
+    });
+  }
+
+  // Vuelve a la pantalla de cargas activas. La carga en curso NO se cierra: sigue abierta y se retoma desde el
+  // panel. `limpiarCargadores` (tras cerrar una carga) borra la selección de quién carga.
+  function volverAlPanel_(limpiarCargadores) {
+    if (ESCANEO_PROCESANDO_) return;
+    cargaActualId = null;
+    paletesSsccCargaActual_ = [];
+    if (limpiarCargadores) {
+      cargadoresSeleccionados_ = [];
+      marcarChipsCargadores_();
+      pintarResumenCargadores_('');
+    }
+    document.getElementById('camionPaso2').classList.add('vista-oculta');
+    document.getElementById('camionPaso3').classList.add('vista-oculta');
+    document.getElementById('camionPaso1').classList.remove('vista-oculta');
+    actualizarStepper_(1);
+    cargarPanelCargas_();
+  }
+  // ══ CARGAS ACTIVAS Y CARGADOR: fin ══
 
   function renderizarListaCamion_(escaneados) {
     var cont = document.getElementById('camionLista');
@@ -2608,7 +2977,7 @@
       gas('quitarSoporteDeCarga', cargaActualId, idUnico).then(function () {
         gas('obtenerCarga', cargaActualId).then(function (c) { renderizarListaCamion_(c.escaneados); });
       }).catch(function (err) {
-        alert('Error al quitar: ' + (err && err.message ? err.message : err));
+        mostrarModalAviso_('No se pudo quitar el soporte', err && err.message ? err.message : String(err));
       });
     }, 'Quitar soporte');
   }
@@ -2620,7 +2989,7 @@
         paletesSsccCargaActual_ = paletesSsccCargaActual_.filter(function (s) { return s !== sscc; });
         renderizarListaPalets_();
       }).catch(function (err) {
-        alert('Error al quitar: ' + (err && err.message ? err.message : err));
+        mostrarModalAviso_('No se pudo quitar el palet', err && err.message ? err.message : String(err));
       });
     }, 'Quitar palet');
   }
@@ -2824,8 +3193,11 @@
     var avisoSie = (r.avisosSie && r.avisosSie.length > 0)
       ? '<p style="color:var(--color-error);font-weight:700;">⚠️ ' + escapeHtml_(r.avisosSie.join(' · ')) + '</p>'
       : '';
+    var avisoReapertura = r.reabierta
+      ? '<p><strong>Informe actualizado:</strong> este informe sustituye al que se envió la primera vez que se cerró esta carga.</p>'
+      : '';
     document.getElementById('camionResumen').innerHTML =
-      '<p>' + r.cantidad + ' soportes cargados.</p><p>' + estadoEmail + '</p>' + avisoForzado + avisoSie;
+      '<p>' + r.cantidad + ' soportes cargados.</p>' + avisoReapertura + '<p>' + estadoEmail + '</p>' + avisoForzado + avisoSie;
     cargaActualId = null;
   }
 
@@ -2884,9 +3256,10 @@
   // se ejecuta de forma síncrona dentro del propio click de "Aceptar" (mismo gesto de
   // usuario), así que sigue siendo válido llamar aquí dentro a actualizarUbicacionesSie_()
   // (requisito de Android para el HTTP Shortcut, ver nota junto a esa función).
-  function mostrarConfirmacion_(mensaje, alConfirmar, titulo) {
+  function mostrarConfirmacion_(mensaje, alConfirmar, titulo, textoBoton) {
     document.getElementById('modalConfirmarTitulo').textContent = titulo || 'Confirmar';
     document.getElementById('modalConfirmarTexto').textContent = mensaje;
+    document.getElementById('modalConfirmarBtnOk').textContent = textoBoton || 'Aceptar';
     document.getElementById('modalConfirmarBtnOk').onclick = function () {
       cerrarModalConfirmar_();
       alConfirmar();
@@ -2931,6 +3304,8 @@
   function iniciarVistaOperario_() {
     generarChipsFecha_();
     actualizarStepper_(1);
+    cargarCargadores_();
+    cargarPanelCargas_();
     if (TIENDA_FILTRO) {
       marcarTiendaCamionSeleccionada_(TIENDA_FILTRO);
     }
@@ -2942,9 +3317,9 @@
       if (HORARIO_CONTEXTO) document.getElementById('camionHorario').value = HORARIO_CONTEXTO;
 
       if (TIENDA_FILTRO && FECHA_CONTEXTO && HORARIO_CONTEXTO) {
-        // Contexto completo (llegada cruzada desde Carta de Portes SIE): sin volver a
-        // preguntar destino/fecha/hora, seguir directamente la carga de ese camión.
-        abrirCargaDirecta_(TIENDA_FILTRO, FECHA_CONTEXTO, HORARIO_CONTEXTO);
+        // Contexto completo (llegada cruzada desde Carta de Portes SIE): el formulario queda relleno con
+        // ese camión, pero la carga ya no se abre sola (2026-10-15): hay que indicar quién carga.
+        mostrarAvisoContexto_(TIENDA_FILTRO, HORARIO_CONTEXTO);
       }
     });
   }

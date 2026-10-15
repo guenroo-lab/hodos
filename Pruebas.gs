@@ -235,16 +235,14 @@ function verificarSistema() {
       // Integración con Carta de Portes SIE: obtenerOCrearCarga debe reutilizar la carga
       // si ya hay una ABIERTA con el mismo destino+fecha+horario ("seguir" el mismo
       // camión), y solo crear una nueva si no existe.
-      // Limpieza defensiva PRIMERO: versiones anteriores de esta prueba nunca cerraban la
-      // carga de prueba, así que podría quedar una ABIERTA de una ejecución antigua — si no
-      // se cierra antes, r1 la "reutilizaría" y la aserción de abajo daría un falso ERROR.
-      var abiertaPrevia = listarCargasAbiertas().filter(function (c) {
-        return c.destino === 'Málaga' && c.fechaEntrega === '2026-07-30' && c.horario === '18:00';
-      })[0];
-      if (abiertaPrevia) cerrarCarga(abiertaPrevia.idCarga);
-
-      var r1 = obtenerOCrearCarga('Málaga', '2026-07-30', '18:00');
-      var r2 = obtenerOCrearCarga('Málaga', '2026-07-30', '18:00');
+      // Desde 2026-10-15 un camión (destino+fecha+horario) = UNA carga para siempre: la cerrada
+      // tampoco se duplica (se avisa de que se puede reabrir), y exige cargador. Por eso cada
+      // ejecución usa un horario propio (si no, la carga cerrada de la ejecución anterior saldría
+      // aquí como "cerrada" en vez de crear una nueva y la aserción daría un falso ERROR) y una
+      // fecha de llegada futura (así la cerrada sigue siendo reabrible).
+      var horarioPrueba = 'PRUEBA ' + new Date().getTime();
+      var r1 = obtenerOCrearCarga('Málaga', '2099-12-31', horarioPrueba, ['Juanlu']);
+      var r2 = obtenerOCrearCarga('Málaga', '2099-12-31', horarioPrueba, ['Juanlu']);
       var okReutiliza = !r1.reutilizada && r2.reutilizada && r1.idCarga === r2.idCarga;
       resultados.push(okReutiliza
         ? 'OK: obtenerOCrearCarga reutiliza la carga abierta con mismo destino+fecha+horario'
@@ -252,6 +250,11 @@ function verificarSistema() {
       // Autolimpieza: sin esto, esta carga de prueba quedaría ABIERTA para siempre y
       // rompería la próxima ejecución de esta misma prueba (bug real encontrado en revisión).
       cerrarCarga(r1.idCarga);
+      // Ya cerrada: ni se crea otra ni se reabre sola; se avisa de que el camión aún no ha llegado.
+      var r3 = obtenerOCrearCarga('Málaga', '2099-12-31', horarioPrueba, ['Juanlu']);
+      resultados.push(r3.cerrada && r3.reabrible && r3.idCarga === r1.idCarga
+        ? 'OK: obtenerOCrearCarga no duplica un camión ya cerrado (avisa de que se puede reabrir)'
+        : 'ERROR obtenerOCrearCarga (carga cerrada): ' + JSON.stringify(r3));
     } catch (e) {
       resultados.push('ERROR obtenerOCrearCarga: ' + e.toString());
     }

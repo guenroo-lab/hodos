@@ -25,7 +25,28 @@ var B2B_NUM_SECS_SIE_    = 13;  // Secciones 1-13 → cols O(15) a AA(27)
 // para la fila, no con el instante de ejecución. Bug heredado sin cambios del puerto
 // directo de CartaPortesSIE (CartaPortes.gs) — no es un cambio de contrato con Leroy
 // Merlin, solo arregla qué hoja se abre dentro del mismo documento.
-function actualizarB2BSIE_(tienda, fecha, horario, paletsCotejados) {
+// Palets SIE cotejados por sección del B2B (1-13): {1: n, …, 13: n}. Solo cuentan los encontrados en el
+// inventario con un código de sección válido. Lo usan actualizarB2BSIE_ y la reapertura de cargas.
+function conteoSeccionesSie_(palets) {
+  var conteo = {};
+  for (var s = 1; s <= B2B_NUM_SECS_SIE_; s++) conteo[s] = 0;
+  (palets || []).forEach(function (p) {
+    if (!p.encontrado) return;
+    var match = String(p.codSeccion || '').match(/(\d+)/);
+    if (match) {
+      var num = parseInt(match[1]);
+      if (num >= 1 && num <= B2B_NUM_SECS_SIE_) conteo[num]++;
+    }
+  });
+  return conteo;
+}
+
+// conteoPrevio (opcional, 2026-10-15): lo que ya se sumó al B2B en un cierre anterior de ESTA misma carga.
+// El B2B suma a las celdas de sección, así que al cerrar otra vez una carga reabierta solo se aplica la
+// diferencia (conteo nuevo − previo, puede ser negativa si se quitaron palets; una celda nunca baja de 0).
+// Sin conteoPrevio (primer cierre) suma todo, igual que siempre. Devuelve también `conteo` (lo aplicado en
+// total por esta carga) para que cerrarCarga lo guarde como nuevo conteoPrevio.
+function actualizarB2BSIE_(tienda, fecha, horario, paletsCotejados, conteoPrevio) {
   try {
     var ss = SpreadsheetApp.openById(SHEETS_ID_B2B_SIE_);
 
@@ -88,23 +109,13 @@ function actualizarB2BSIE_(tienda, fecha, horario, paletsCotejados) {
       return { ok: false, error: 'Fila no encontrada en el B2B (' + destinoB2B + ' | ' + fecha + ' | ' + horario + ')' };
     }
 
-    var conteo = {};
-    for (var s = 1; s <= B2B_NUM_SECS_SIE_; s++) conteo[s] = 0;
-
-    // Bug real (2026-09-24): esto sacaba el número con una regex del NOMBRE del
+    // Bug real (2026-09-24): el número de sección NO se saca con una regex del NOMBRE del
     // departamento (`p.seccion`, p.ej. "CARPINTERIA Y MADERA") — funcionaba mientras el
     // inventario traía números ("Sección 3"), pero desde que el CSV de StockSearch trae
     // nombres (17/09/2026) nunca encontraba dígito y el conteo salía siempre a cero. El
     // número correcto es `p.codSeccion` (Cod_Seccion del CSV / departmentCode de MyIso),
     // que YA viaja en el inventario aparte del nombre — confirmado con Pedro 2026-09-24.
-    paletsCotejados.forEach(function (p) {
-      if (!p.encontrado) return;
-      var match = String(p.codSeccion || '').match(/(\d+)/);
-      if (match) {
-        var num = parseInt(match[1]);
-        if (num >= 1 && num <= B2B_NUM_SECS_SIE_) conteo[num]++;
-      }
-    });
+    var conteo = conteoSeccionesSie_(paletsCotejados);
 
     var rangoSecs  = hoja.getRange(filaTarget, B2B_COL_SEC1_SIE_, 1, B2B_NUM_SECS_SIE_);
     var secsActual = rangoSecs.getValues()[0];
@@ -112,7 +123,8 @@ function actualizarB2BSIE_(tienda, fecha, horario, paletsCotejados) {
     var nuevasSecs = [];
     for (var s2 = 1; s2 <= B2B_NUM_SECS_SIE_; s2++) {
       var actual = parseInt(secsActual[s2 - 1]) || 0;
-      nuevasSecs.push(actual + (conteo[s2] || 0));
+      var yaAplicado = conteoPrevio ? (parseInt(conteoPrevio[s2]) || 0) : 0;
+      nuevasSecs.push(Math.max(0, actual + (conteo[s2] || 0) - yaAplicado));
     }
 
     rangoSecs.setValues([nuevasSecs]);
@@ -132,12 +144,13 @@ function actualizarB2BSIE_(tienda, fecha, horario, paletsCotejados) {
     if (paletsCotejados.length > 0 && totalContado === 0) {
       return {
         ok: true,
+        conteo: conteo,
         aviso: 'Se cotejaron ' + paletsCotejados.length + ' palets SIE para ' + destinoB2B +
           ' pero ninguno se sumó a una sección del B2B (sin coincidencia en el inventario o sección sin número) — revísalo a mano.'
       };
     }
 
-    return { ok: true };
+    return { ok: true, conteo: conteo };
 
   } catch (err) {
     Logger.log('ERROR actualizarB2BSIE_: ' + err.toString());

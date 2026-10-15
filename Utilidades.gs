@@ -376,3 +376,105 @@ function prepararLineasContenido(items) {
       return { descripcion: String(it.descripcion).trim(), cantidad: Number(it.cantidad) || 0 };
     });
 }
+
+// ── Cargas: cargador, hora de llegada y reapertura (2026-10-15) ──────────────────────────
+
+// Personas que realizan las cargas. COPIA de la lista del proyecto «Cargas/Descargas Plataforma
+// Málaga» (proyecto_cargas/src/CargasDescargas.gs: OPERARIOS_CARGAS = principales y CARGADORES_AUX =
+// auxiliares). Si allí cambia la lista hay que actualizarla aquí: test/cargasReapertura.test.js
+// compara las dos cuando el otro proyecto está en el equipo.
+var CARGADORES_PRINCIPALES_ = ['Manuel Rosas', 'Sergio Sánchez', 'Antonio Sánchez', 'Juanlu'];
+var CARGADORES_AUXILIARES_ = [
+  'Alberto', 'Daniel.Arrastio', 'Daniel.Simo', 'Sebas', 'Fran P', 'Rafa Perez',
+  'David Planas', 'Brunelli', 'Francisco', 'Jesus Seco', 'JM Bonamigo', 'Campana',
+  'Carlos Gutierrez', 'Salva', 'Carlos. Osuna', 'Alex. Rios', 'Jose Antonio',
+  'Luciano', 'Pablo', 'Daniel Cano', 'Paqui', 'Alejandro Giner', 'Pedro Serrano',
+  'Edson', 'Antonio M.', 'Oscar'
+];
+var MAX_CARGADORES_POR_CARGA_ = 2;
+
+// Devuelve la lista limpia (sin repetidos, sin espacios) o lanza un error legible para el operario.
+function validarCargadores_(valor) {
+  var lista = Array.isArray(valor) ? valor : String(valor == null ? '' : valor).split(',');
+  var limpios = [];
+  lista.forEach(function (n) {
+    var nombre = String(n == null ? '' : n).trim();
+    if (nombre && limpios.indexOf(nombre) === -1) limpios.push(nombre);
+  });
+  if (limpios.length === 0) throw new Error('Indica quién carga (elige a una o dos personas de la lista).');
+  var permitidos = CARGADORES_PRINCIPALES_.concat(CARGADORES_AUXILIARES_);
+  limpios.forEach(function (nombre) {
+    if (permitidos.indexOf(nombre) === -1) throw new Error('Cargador no válido, no está en la lista de Cargas/Descargas: ' + nombre + '.');
+  });
+  if (limpios.length > MAX_CARGADORES_POR_CARGA_) throw new Error('Máximo ' + MAX_CARGADORES_POR_CARGA_ + ' personas por carga.');
+  return limpios;
+}
+
+// «A, B» + [B, C] -> «A, B, C»: cada vez que alguien abre o reabre la carga se anota sin borrar a los anteriores.
+function unirCargadores_(actual, nuevos) {
+  var vistos = [];
+  String(actual == null ? '' : actual).split(',').concat(nuevos || []).forEach(function (n) {
+    var nombre = String(n == null ? '' : n).trim();
+    if (nombre && vistos.indexOf(nombre) === -1) vistos.push(nombre);
+  });
+  return vistos.join(', ');
+}
+
+// Horario de verano de la UE: del último domingo de marzo (01:00 UTC) al último de octubre (01:00 UTC).
+function _ultimoDomingoUtc_(anio, mes) {
+  var ultimoDia = new Date(Date.UTC(anio, mes + 1, 0));
+  return ultimoDia.getUTCDate() - ultimoDia.getUTCDay();
+}
+
+function _enVeranoMadrid_(instanteUtcMs) {
+  var anio = new Date(instanteUtcMs).getUTCFullYear();
+  var inicio = Date.UTC(anio, 2, _ultimoDomingoUtc_(anio, 2), 1, 0);
+  var fin = Date.UTC(anio, 9, _ultimoDomingoUtc_(anio, 9), 1, 0);
+  return instanteUtcMs >= inicio && instanteUtcMs < fin;
+}
+
+// Fecha (yyyy-MM-dd) en Madrid de un instante UTC en milisegundos.
+function fechaMadridISO_(instanteUtcMs) {
+  var horas = _enVeranoMadrid_(instanteUtcMs) ? 2 : 1;
+  return new Date(instanteUtcMs + horas * 3600000).toISOString().slice(0, 10);
+}
+
+// Hora de llegada de una carga = fecha de entrega + horario, en hora de Madrid. Devuelve milisegundos UTC
+// (o null si la fecha no es válida). Un horario que no es una hora («Envío único diario», Granada) cuenta
+// hasta el final de ese día.
+function fechaLlegadaCarga_(fechaEntrega, horario) {
+  var f = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(fechaEntrega || ''));
+  if (!f) return null;
+  var h = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(String(horario || ''));
+  var minutos = h ? Number(h[1]) * 60 + Number(h[2]) : 24 * 60 - 1;
+  var relojDePared = Date.UTC(Number(f[1]), Number(f[2]) - 1, Number(f[3]), 0, minutos); // hora local como si fuera UTC
+  var horasMadrid = _enVeranoMadrid_(relojDePared - 2 * 3600000) ? 2 : 1;
+  return relojDePared - horasMadrid * 3600000;
+}
+
+// Regla del usuario: una carga se puede añadir/quitar/reabrir hasta que se cumple su hora y día de llegada.
+function cargaModificablePorLlegada_(carga, ahoraMs) {
+  var llegada = fechaLlegadaCarga_(carga && carga.fechaEntrega, carga && carga.horario);
+  if (llegada == null) return false; // sin fecha válida, lado seguro: no se toca
+  return ahoraMs < llegada;
+}
+
+function textoLlegadaCarga_(carga) {
+  var f = /^(\d{4})-(\d{2})-(\d{2})/.exec(String((carga && carga.fechaEntrega) || ''));
+  var fecha = f ? f[3] + '/' + f[2] + '/' + f[1] : String((carga && carga.fechaEntrega) || '');
+  return fecha + ' ' + ((carga && carga.horario) || '');
+}
+
+// Un camión (destino+fecha+horario) = una carga. Si por datos antiguos hay varias, manda la abierta más
+// reciente y, si no hay abierta, la cerrada más reciente.
+function elegirCargaExistente_(cargas) {
+  var masReciente = function (lista) {
+    return lista.slice().sort(function (a, b) {
+      var ta = String(a.fechaCreacion || ''); var tb = String(b.fechaCreacion || '');
+      return tb < ta ? -1 : (tb > ta ? 1 : 0);
+    })[0] || null;
+  };
+  var abiertas = (cargas || []).filter(function (c) { return c.estado === 'ABIERTA'; });
+  if (abiertas.length) return masReciente(abiertas);
+  return masReciente((cargas || []).filter(function (c) { return c.estado === 'CERRADA'; }));
+}

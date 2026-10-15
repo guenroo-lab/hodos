@@ -99,6 +99,14 @@ function htmlInformeCarga(idCarga) {
       + '</table></td></tr>';
   }
 
+  // Carga reabierta y vuelta a cerrar (2026-10-15): el informe nuevo sustituye al que ya se envió.
+  var bannerReapertura = carga.reabierta
+    ? '<tr><td style="padding:10px 20px;background:#fff7e6;border-bottom:1px solid #f0d9a8;font-size:11px;color:#8a5a00;">'
+      + '<strong>INFORME ACTUALIZADO</strong> — esta carga se reabrió el '
+      + esc_(Utilities.formatDate(new Date(carga.reabiertaEn), 'Europe/Madrid', 'dd/MM/yyyy HH:mm'))
+      + ' para modificarla; este informe sustituye al anterior.</td></tr>'
+    : '';
+
   return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">'
     + '<style>body{margin:0;padding:0;font-family:Arial,sans-serif;font-size:12px;}table{border-collapse:collapse;}</style>'
     + '</head><body style="background:#ffffff;margin:0;padding:20px;">'
@@ -115,7 +123,9 @@ function htmlInformeCarga(idCarga) {
     + '<td style="text-align:right;font-size:11px;color:rgba(255,255,255,0.9);line-height:1.8;">'
     + '<strong>Fecha entrega:</strong> ' + esc_(Utilities.formatDate(new Date(carga.fechaEntrega), 'GMT+1', 'dd/MM/yyyy'))
     + (carga.horario ? '<br><strong>Horario:</strong> ' + esc_(carga.horario) : '')
+    + (carga.cargador ? '<br><strong>Cargador:</strong> ' + esc_(carga.cargador) : '')
     + '</td></tr></table></td></tr>'
+    + bannerReapertura
     + '<tr><td style="padding:14px 20px 4px;">' + chipResumen + '</td></tr>'
     // Línea de contexto (2026-08-12): antes el documento se llamaba "Pedido Cliente", pero
     // una carga incluye soportes de cualquier origen (MECO, cesiones entre tiendas, etc.),

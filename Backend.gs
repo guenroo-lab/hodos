@@ -603,7 +603,7 @@ function actualizarSoporteAdmin(idUnico, cambios) {
 
 var PROP_CONTADOR_CARGA = 'HODOS_CONTADOR_CARGA';
 
-function crearCarga(destino, fechaEntrega, horario) {
+function crearCarga(destino, fechaEntrega, horario, cargador) {
   if (!destino) throw new Error('Falta el destino');
   if (!validarTienda(destino)) throw new Error('La tienda destino no es válida: "' + destino + '"');
   if (!fechaEntrega) throw new Error('Falta la fecha de entrega');
@@ -611,7 +611,7 @@ function crearCarga(destino, fechaEntrega, horario) {
 
   var idCarga = supaRpc_('siguiente_id_carga', {});
   var creadoPor = Session.getActiveUser().getEmail() || 'desconocido';
-  insertarCarga_({ idCarga: idCarga, destino: destino, fechaEntrega: fechaEntrega, horario: horario, estado: 'ABIERTA', creadaPor: creadoPor });
+  insertarCarga_({ idCarga: idCarga, destino: destino, fechaEntrega: fechaEntrega, horario: horario, estado: 'ABIERTA', creadaPor: creadoPor, cargador: cargador || null });
   cachearCargaAbierta_(idCarga, destino);
   return { idCarga: idCarga };
 }
@@ -628,36 +628,153 @@ function listarCargasAbiertas() {
   });
 }
 
-function obtenerOCrearCarga(destino, fechaEntrega, horario) {
-  // Permite "seguir" una carga ya abierta desde el enlace cruzado de Carta de Portes
-  // SIE (mismo camión = mismo destino+fecha+horario) sin duplicar cargas si dos personas
-  // (o la misma, dos veces) llegan al mismo contexto.
+function obtenerOCrearCarga(destino, fechaEntrega, horario, cargadores) {
+  // Un camión (destino+fecha+horario) = UNA carga (2026-10-15). Antes solo se buscaba entre las
+  // ABIERTAS, así que una vez cerrada la carga de un camión se podía crear otra igual y "cargar
+  // varias veces el mismo camión". Ahora se busca en cualquier estado:
+  //  - abierta -> se continúa y se anota quién carga;
+  //  - cerrada y aún no ha llegado -> NO se reabre sola ni se crea otra: se devuelve marcada
+  //    {cerrada:true, reabrible:true} para que la pantalla pida confirmación y llame a reabrirCarga;
+  //  - cerrada y ya ha llegado -> igual pero {reabrible:false} (ya no se puede modificar);
+  //  - no existe -> se crea.
+  // También sirve para "seguir" la carga desde el enlace cruzado de Carta de Portes SIE.
   //
   // Bug real (2026-09-23, revisión de seguridad): leer+decidir+crear sin lock es un
   // check-then-act clásico — dos peticiones casi simultáneas con el mismo
-  // destino+fecha+horario (dos personas abriendo el enlace cruzado a la vez) podían
-  // ver ambas "no existe" y crear dos cargas ABIERTA distintas para el mismo camión.
-  // A diferencia de escanearSoporte (alta frecuencia, por eso usa concurrencia
-  // optimista para no pagar el coste de un lock en cada escaneo), esta función se
-  // llama una vez por camión — un LockService.getScriptLock() aquí es barato y cierra
-  // la ventana del todo, sin la complejidad de un PATCH condicionado sin campo claro
-  // contra el que condicionar (no hay "estado" que distinga una carga-de-este-camión
-  // de otra: la unicidad es la terna destino+fecha+horario, no una columna).
+  // destino+fecha+horario podían ver ambas "no existe" y crear dos cargas distintas para el
+  // mismo camión. Esta función se llama una vez por camión (no por escaneo), así que un
+  // LockService.getScriptLock() aquí es barato y cierra la ventana del todo.
+  var quienes = validarCargadores_(cargadores); // sin cargador no se toca nada (ni lock ni consulta)
+  if (!destino) throw new Error('Falta el destino');
+  if (!validarTienda(destino)) throw new Error('La tienda destino no es válida: "' + destino + '"');
+  if (!fechaEntrega) throw new Error('Falta la fecha de entrega');
+  if (!horario) throw new Error('Falta el horario');
+
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    var abiertas = listarCargasAbiertas();
-    var existente = abiertas.filter(function (c) {
-      return c.destino === destino && c.fechaEntrega === fechaEntrega && c.horario === horario;
-    })[0];
-    if (existente) {
-      return { idCarga: existente.idCarga, reutilizada: true };
+    var existentes = leerCargas_('destino=eq.' + encodeURIComponent(destino) +
+      '&fecha_entrega=eq.' + encodeURIComponent(fechaEntrega) + '&horario=eq.' + encodeURIComponent(horario));
+    var elegida = elegirCargaExistente_(existentes);
+    if (elegida && elegida.estado === 'ABIERTA') {
+      var cargadoresUnidos = unirCargadores_(elegida.cargador, quienes);
+      // Solo se escribe si alguien nuevo se anota (continuar la carga con la misma gente no toca la base).
+      if (cargadoresUnidos !== String(elegida.cargador || '')) actualizarCarga_(elegida.idCarga, { cargador: cargadoresUnidos });
+      return { idCarga: elegida.idCarga, reutilizada: true };
     }
-    var nueva = crearCarga(destino, fechaEntrega, horario);
+    if (elegida) {
+      var llegada = fechaLlegadaCarga_(elegida.fechaEntrega, elegida.horario);
+      return {
+        idCarga: elegida.idCarga, cerrada: true,
+        reabrible: cargaModificablePorLlegada_(elegida, new Date().getTime()),
+        destino: elegida.destino, fechaEntrega: fechaComoTexto(elegida.fechaEntrega).split('T')[0], horario: elegida.horario,
+        cerradaPor: elegida.cerradaPor || '', fechaCierre: fechaComoTexto(elegida.fechaCierre),
+        llegada: llegada == null ? '' : new Date(llegada).toISOString(),
+        textoLlegada: textoLlegadaCarga_(elegida)
+      };
+    }
+    var nueva = crearCarga(destino, fechaEntrega, horario, quienes.join(', '));
     return { idCarga: nueva.idCarga, reutilizada: false };
   } finally {
     lock.releaseLock();
   }
+}
+
+// Reabre una carga CERRADA para añadir o quitar mercancía (2026-10-15). Solo hasta la hora y día de
+// llegada de su camión: pasada esa hora ya no se modifica. Al volver a cerrarla sale un informe
+// «ACTUALIZADO» y al B2B de Leroy Merlin solo se le aplica la diferencia (ver cerrarCarga).
+function reabrirCarga(idCarga, cargadores) {
+  var quienes = validarCargadores_(cargadores);
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var cargas = leerCargas_('id_carga=eq.' + encodeURIComponent(idCarga));
+    if (cargas.length === 0) throw new Error('Carga no encontrada: ' + idCarga);
+    var c = cargas[0];
+    if (c.estado === 'ABIERTA') return { idCarga: idCarga, yaAbierta: true }; // doble clic, o la abrió otra persona
+    if (c.estado !== 'CERRADA') throw new Error('La carga ' + idCarga + ' no se puede reabrir (estado ' + c.estado + ').');
+    if (!cargaModificablePorLlegada_(c, new Date().getTime())) {
+      throw new Error('No se puede reabrir la carga ' + idCarga + ': ya ha pasado su hora de llegada (' + textoLlegadaCarga_(c) + ').');
+    }
+    var cambios = {
+      estado: 'ABIERTA',
+      reabiertaPor: Session.getActiveUser().getEmail() || 'desconocido',
+      reabiertaEn: new Date().toISOString(),
+      cargador: unirCargadores_(c.cargador, quienes)
+    };
+    // Las cargas cerradas antes de esta mejora no tienen anotado lo que se sumó al B2B: se calcula con
+    // sus palets (ya cotejados al cerrar) ANTES de tocarlos, para poder aplicar solo la diferencia luego.
+    if (c.b2bConteo == null) {
+      var palets = leerPaletesPorCarga_(idCarga);
+      if (palets.length) cambios.b2bConteo = conteoSeccionesSie_(palets);
+    }
+    // PATCH condicionado a que siga CERRADA (mismo patrón que el cierre): si otra ejecución la cambió
+    // entre la lectura y la escritura, no se pisa nada.
+    var reabierta = actualizarCargaCondicional_(idCarga, cambios, 'estado=eq.CERRADA');
+    if (!reabierta) {
+      var relectura = leerCargas_('id_carga=eq.' + encodeURIComponent(idCarga));
+      if (relectura.length && relectura[0].estado === 'ABIERTA') return { idCarga: idCarga, yaAbierta: true };
+      throw new Error('No se pudo reabrir la carga ' + idCarga + ': cambió mientras tanto. Vuelve a intentarlo.');
+    }
+    // A propósito NO se repuebla el caché de «carga abierta» (ver cachearCargaAbierta_): ese caché solo lo
+    // escribe crearCarga y solo lo borra cerrarCarga, y un segundo escritor podría dejarlo diciendo ABIERTA
+    // tras un cierre simultáneo desde otro móvil. Sin caché, escanearSoporte lee la carga en fresco (una
+    // lectura más por escaneo, solo en cargas reabiertas) y nunca queda un estado incorrecto.
+    return { idCarga: idCarga, reabierta: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+var TROZO_IDS_CARGAS_PANEL_ = 40; // ids por petición: la URL de UrlFetchApp no admite listas largas (~2 KB)
+
+// Nº de filas de `tabla` (etiquetas o palets) por carga: {idCarga: n}. Solo baja la columna batea_id.
+function contarPorCarga_(tabla, ids) {
+  var cuenta = {};
+  for (var i = 0; i < ids.length; i += TROZO_IDS_CARGAS_PANEL_) {
+    var trozo = ids.slice(i, i + TROZO_IDS_CARGAS_PANEL_);
+    supaGet_(tabla, 'batea_id=in.(' + trozo.map(encodeURIComponent).join(',') + ')', 'batea_id').forEach(function (f) {
+      cuenta[f.batea_id] = (cuenta[f.batea_id] || 0) + 1;
+    });
+  }
+  return cuenta;
+}
+
+// Cargas que se ven en la pantalla del muelle (2026-10-15): las ABIERTAS (de ayer en adelante, para no
+// arrastrar restos viejos) y las CERRADAS cuyo camión aún no ha llegado (se pueden reabrir). Primero las
+// abiertas y dentro de cada grupo por hora de llegada. El cliente no la repite por sondeo (egress de Supabase).
+function listarCargasPanel() {
+  var ahora = new Date().getTime();
+  var hoy = fechaMadridISO_(ahora);
+  var ayer = fechaMadridISO_(ahora - 24 * 3600000);
+  var filas = leerCargas_('or=(and(estado.eq.ABIERTA,fecha_entrega.gte.' + ayer + '),fecha_entrega.gte.' + hoy + ')');
+  var cargas = filas.filter(function (c) {
+    return c.estado === 'ABIERTA' || (c.estado === 'CERRADA' && cargaModificablePorLlegada_(c, ahora));
+  });
+  if (cargas.length === 0) return [];
+  var ids = cargas.map(function (c) { return c.idCarga; });
+  var soportes = contarPorCarga_('etiquetas', ids);
+  var palets = contarPorCarga_('palets', ids);
+  var items = cargas.map(function (c) {
+    var llegada = fechaLlegadaCarga_(c.fechaEntrega, c.horario);
+    var abierta = c.estado === 'ABIERTA';
+    return {
+      abierta: abierta, llegadaMs: llegada == null ? 0 : llegada,
+      dato: {
+        idCarga: c.idCarga, destino: c.destino, fechaEntrega: fechaComoTexto(c.fechaEntrega).split('T')[0], horario: c.horario,
+        estado: c.estado, cargador: c.cargador || '',
+        fechaCreacion: fechaComoTexto(c.fechaCreacion), fechaCierre: fechaComoTexto(c.fechaCierre),
+        soportes: soportes[c.idCarga] || 0, palets: palets[c.idCarga] || 0,
+        llegada: llegada == null ? '' : new Date(llegada).toISOString(),
+        reabrible: !abierta, vencida: abierta && !cargaModificablePorLlegada_(c, ahora), reabierta: !!c.reabiertaEn
+      }
+    };
+  });
+  items.sort(function (a, b) {
+    if (a.abierta !== b.abierta) return a.abierta ? -1 : 1;
+    return a.llegadaMs - b.llegadaMs;
+  });
+  return items.map(function (x) { return x.dato; });
 }
 
 function obtenerCarga(idCarga) {
@@ -680,7 +797,9 @@ function obtenerCarga(idCarga) {
   return {
     idCarga: filaCarga.idCarga, destino: filaCarga.destino,
     fechaEntrega: fechaComoTexto(filaCarga.fechaEntrega), horario: filaCarga.horario,
-    estado: filaCarga.estado, escaneados: escaneados
+    estado: filaCarga.estado, escaneados: escaneados,
+    cargador: filaCarga.cargador || '', reabierta: !!filaCarga.reabiertaEn,
+    reabiertaEn: fechaComoTexto(filaCarga.reabiertaEn), reabiertaPor: filaCarga.reabiertaPor || ''
   };
 }
 
@@ -914,6 +1033,12 @@ function cerrarCarga(idCarga, forzar) {
 
   var carga = obtenerCarga(idCarga);
 
+  // Carga reabierta (2026-10-15): el informe sale marcado «ACTUALIZADO» y el B2B recibe solo la
+  // diferencia con lo que ya se aplicó en el cierre anterior (ver actualizarB2BSIE_).
+  var reabierta = !!cargas[0].reabiertaEn;
+  var conteoPrevio = (cargas[0].b2bConteo && typeof cargas[0].b2bConteo === 'object') ? cargas[0].b2bConteo : null;
+  var hayConteoPrevio = !!conteoPrevio && Object.keys(conteoPrevio).some(function (k) { return (Number(conteoPrevio[k]) || 0) !== 0; });
+
   // Fusión Carta de Portes SIE (2026-09-15): si esta carga tiene palets refill,
   // cotejarlos contra el inventario del día ANTES de generar el informe (para que
   // salgan con sección/código LM), y anotar el resultado para el B2B y el email.
@@ -954,7 +1079,7 @@ function cerrarCarga(idCarga, forzar) {
       MailApp.sendEmail({
         to: destinatarios.join(','),
         cc: ccEnvio.join(','),
-        subject: 'HODOS · Informe de carga · ' + carga.destino + ' · ' + fechaArchivo + (carga.horario ? ' · ' + carga.horario : ''),
+        subject: 'HODOS · Informe de carga' + (reabierta ? ' ACTUALIZADO' : '') + ' · ' + carga.destino + ' · ' + fechaArchivo + (carga.horario ? ' · ' + carga.horario : ''),
         htmlBody: htmlEmail,
         attachments: [pdfFile],
         inlineImages: { logoTaisa: logoInline }
@@ -969,18 +1094,24 @@ function cerrarCarga(idCarga, forzar) {
   // que hacía CartadePortesSIE — independiente del email (try/catch propio dentro
   // de actualizarB2BSIE_), solo si esta carga trae palets refill.
   var resultadoB2B = null;
-  if (tienePaletsSie && carga.horario) {
+  // También se vuelve a escribir cuando ya no queda ningún palet pero antes se aplicó algo (carga
+  // reabierta a la que se quitaron todos): así se resta lo ya sumado. Nunca si el cotejo falló (los
+  // palets siguen ahí aunque no se pudieran contar: restar sería un error).
+  if (cotejoSie.ok && (tienePaletsSie || hayConteoPrevio) && carga.horario) {
     var partesFechaB2B = carga.fechaEntrega.split('T')[0].split('-');
     var fechaB2B = partesFechaB2B[2] + '/' + partesFechaB2B[1] + '/' + partesFechaB2B[0];
-    resultadoB2B = actualizarB2BSIE_(carga.destino, fechaB2B, carga.horario, cotejoSie.datos);
+    resultadoB2B = actualizarB2BSIE_(carga.destino, fechaB2B, carga.horario, tienePaletsSie ? cotejoSie.datos : [], conteoPrevio);
   }
 
   // El cierre en sí (estado=CERRADA) ya quedó escrito arriba, ANTES del PDF/email —
   // esto solo añade el campo informativo emailEnviado a la misma fila. Si esto
   // fallara (red inestable), la carga sigue correctamente CERRADA; solo se pierde
   // ese campo descriptivo, nunca una escritura incorrecta ni un reenvío del informe.
+  var cambiosFinales = { emailEnviado: emailEnviado };
+  // Lo que esta carga ya tiene sumado en el B2B: el próximo cierre aplicará solo la diferencia.
+  if (resultadoB2B && resultadoB2B.ok && resultadoB2B.conteo) cambiosFinales.b2bConteo = resultadoB2B.conteo;
   try {
-    actualizarCarga_(idCarga, { emailEnviado: emailEnviado });
+    actualizarCarga_(idCarga, cambiosFinales);
   } catch (e) {
     Logger.log('AVISO: no se pudo guardar emailEnviado en cerrarCarga (' + idCarga + '): ' + e.message);
   }
@@ -1000,6 +1131,6 @@ function cerrarCarga(idCarga, forzar) {
     idCarga: idCarga, cantidad: carga.escaneados.length,
     emailEnviado: emailEnviado, destinatariosConfigurados: destinatarios.length,
     forzado: forzado, avisosOmitidos: forzado ? mensajesBloqueo : [],
-    avisosSie: avisosSie
+    avisosSie: avisosSie, reabierta: reabierta
   };
 }

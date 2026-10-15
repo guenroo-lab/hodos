@@ -471,9 +471,11 @@ function contextoBackendConLock(stubs) {
 
 test('obtenerOCrearCarga: toma y libera el lock, reutiliza si ya existe una carga con ese destino+fecha+horario', () => {
   const ctx = contextoBackendConLock({
-    leerCargas_: () => [{ idCarga: 'CARGA-000001', destino: 'Málaga', fechaEntrega: '2026-09-25', horario: '10:00', fechaCreacion: new Date().toISOString() }]
+    leerCargas_: () => [{ idCarga: 'CARGA-000001', estado: 'ABIERTA', destino: 'Málaga', fechaEntrega: '2026-09-25', horario: '10:00', fechaCreacion: new Date().toISOString() }],
+    actualizarCarga_: () => ({})
   });
-  const r = JSON.parse(JSON.stringify(ctx.obtenerOCrearCarga('Málaga', '2026-09-25', '10:00')));
+  // Desde 2026-10-15 abrir una carga exige cargador (ver test/cargasReapertura.test.js para el resto de casos).
+  const r = JSON.parse(JSON.stringify(ctx.obtenerOCrearCarga('Málaga', '2026-09-25', '10:00', ['Juanlu'])));
   assert.deepStrictEqual(r, { idCarga: 'CARGA-000001', reutilizada: true });
   assert.deepStrictEqual(ctx._llamadasLock, ['waitLock', 'releaseLock']);
 });
@@ -484,7 +486,7 @@ test('obtenerOCrearCarga: libera el lock incluso si crearCarga lanza', () => {
     Session: { getActiveUser: () => ({ getEmail: () => 'a@b.com' }) },
     supaRpc_: () => { throw new Error('Supabase caída'); }
   });
-  assert.throws(() => ctx.obtenerOCrearCarga('Málaga', '2026-09-25', '10:00'), /Supabase caída/);
+  assert.throws(() => ctx.obtenerOCrearCarga('Málaga', '2026-09-25', '10:00', ['Juanlu']), /Supabase caída/);
   assert.deepStrictEqual(ctx._llamadasLock, ['waitLock', 'releaseLock']);
 });
 

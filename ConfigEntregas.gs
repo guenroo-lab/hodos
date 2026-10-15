@@ -124,6 +124,15 @@ function obtenerHorariosTienda(destino) {
   return HORARIOS_ENTREGA_TIENDA[destino] || [];
 }
 
+// Personas que pueden figurar como cargador de una carga (la lista de Cargas/Descargas, ver Utilidades.gs).
+function obtenerCargadores() {
+  return {
+    principales: CARGADORES_PRINCIPALES_.slice(),
+    auxiliares: CARGADORES_AUXILIARES_.slice(),
+    max: MAX_CARGADORES_POR_CARGA_
+  };
+}
+
 // ── Modo prueba ──
 // Las 4 tiendas tienen ya destinatarios reales configurados (ver
 // EMAILS_PEDIDO_CLIENTE_TIENDA arriba) — sin este interruptor, probar el cierre de
