@@ -71,15 +71,13 @@ function contextoPanel(cargas, soportesPorCarga, paletsPorCarga, extra) {
   return ctx;
 }
 
-test('listarCargasPanel: pide las abiertas desde ayer y todo lo de hoy en adelante, con recuento de soportes y palets', () => {
+test('listarCargasPanel: pide las cargas de ayer en adelante, con recuento de soportes y palets', () => {
   const ctx = contextoPanel(
     [cargaBase({ idCarga: 'A1', estado: 'ABIERTA', cargador: 'Juanlu' })],
     { A1: 10 }, { A1: 3 });
   const r = aLocal(ctx.listarCargasPanel());
   const consulta = ctx._consultas.filter((c) => c.tabla === 'cargas')[0].filtro;
-  assert.match(consulta, /or=\(/);
-  assert.match(consulta, /estado\.eq\.ABIERTA/);
-  assert.match(consulta, /fecha_entrega\.gte\.\d{4}-\d{2}-\d{2}/);
+  assert.match(consulta, /^fecha_entrega=gte\.\d{4}-\d{2}-\d{2}$/, 'todas las cargas desde ayer (cualquier estado): hace falta ver todas las del mismo camión');
   const conteo = ctx._consultas.filter((c) => c.tabla === 'etiquetas')[0];
   assert.strictEqual(conteo.columnas, 'batea_id', 'solo trae la columna batea_id (egress mínimo)');
   assert.strictEqual(r.length, 1);
@@ -110,7 +108,7 @@ test('listarCargasPanel: abiertas primero (por hora de llegada), luego las cerra
 });
 
 test('listarCargasPanel: marca las que se reabrieron alguna vez', () => {
-  const ctx = contextoPanel([cargaBase({ idCarga: 'A1', reabiertaEn: '2099-10-14T09:00:00Z' }), cargaBase({ idCarga: 'A2' })], {}, {});
+  const ctx = contextoPanel([cargaBase({ idCarga: 'A1', reabiertaEn: '2099-10-14T09:00:00Z' }), cargaBase({ idCarga: 'A2', horario: '19:00' })], {}, {});
   const r = aLocal(ctx.listarCargasPanel());
   const por = {}; r.forEach((c) => { por[c.idCarga] = c; });
   assert.strictEqual(por.A1.reabierta, true);
@@ -119,7 +117,7 @@ test('listarCargasPanel: marca las que se reabrieron alguna vez', () => {
 
 test('listarCargasPanel: los recuentos se piden por lotes para que la URL no pase de ~2 KB', () => {
   const cargas = [];
-  for (let i = 1; i <= 85; i++) cargas.push(cargaBase({ idCarga: 'CARGA-' + String(i).padStart(6, '0') }));
+  for (let i = 1; i <= 85; i++) cargas.push(cargaBase({ idCarga: 'CARGA-' + String(i).padStart(6, '0'), horario: i + ':00' })); // un camión cada una
   const ctx = contextoPanel(cargas, {}, {});
   ctx.listarCargasPanel();
   const deEtiquetas = ctx._consultas.filter((c) => c.tabla === 'etiquetas');
@@ -131,6 +129,71 @@ test('listarCargasPanel: sin cargas no pide recuentos', () => {
   const ctx = contextoPanel([], {}, {});
   assert.deepStrictEqual(aLocal(ctx.listarCargasPanel()), []);
   assert.strictEqual(ctx._consultas.filter((c) => c.tabla !== 'cargas').length, 0);
+});
+
+// Cargas repetidas del mismo camión (herencia de cuando solo se buscaban las abiertas): datos reales del 15/10 en
+// Marbella: la 19:00 tenía una cerrada con 6 soportes y 13 palets (631) y otra abierta VACÍA (636) salida de abrir
+// la pantalla otra vez. Manda la que lleva mercancía; la vacía no se ve.
+test('listarCargasPanel: si un camión tiene varias cargas se ve UNA, la que lleva mercancía (no la abierta vacía)', () => {
+  const ctx = contextoPanel([
+    cargaBase({ idCarga: 'C631', estado: 'CERRADA', horario: '19:00', fechaCreacion: '2099-10-14T06:37:00Z' }),
+    cargaBase({ idCarga: 'A636', estado: 'ABIERTA', horario: '19:00', fechaCreacion: '2099-10-14T09:48:00Z' }),
+    cargaBase({ idCarga: 'C635', estado: 'CERRADA', horario: '22:00', fechaCreacion: '2099-10-14T09:45:00Z' }),
+    cargaBase({ idCarga: 'A638', estado: 'ABIERTA', horario: '22:00', fechaCreacion: '2099-10-14T10:11:00Z' })
+  ], { C631: 6, A638: 10 }, { C631: 13 });
+  const r = aLocal(ctx.listarCargasPanel());
+  assert.deepStrictEqual(r.map((c) => c.idCarga).sort(), ['A638', 'C631']);
+  const por = {}; r.forEach((c) => { por[c.idCarga] = c; });
+  assert.strictEqual(por.C631.estado, 'CERRADA');
+  assert.strictEqual(por.C631.reabrible, true, 'se puede reabrir para añadir lo que falta');
+  assert.strictEqual(por.C631.soportes, 6);
+  assert.strictEqual(por.C631.palets, 13);
+  assert.strictEqual(por.A638.soportes, 10);
+});
+
+test('listarCargasPanel: entre dos cargas con mercancía del mismo camión manda la abierta; sin mercancía en ninguna, la abierta más reciente', () => {
+  const ctx = contextoPanel([
+    cargaBase({ idCarga: 'C1', estado: 'CERRADA', horario: '16:00' }),
+    cargaBase({ idCarga: 'A1', estado: 'ABIERTA', horario: '16:00' }),
+    cargaBase({ idCarga: 'V1', estado: 'ABIERTA', horario: '17:30', fechaCreacion: '2099-10-14T08:00:00Z' }),
+    cargaBase({ idCarga: 'V2', estado: 'ABIERTA', horario: '17:30', fechaCreacion: '2099-10-14T09:00:00Z' })
+  ], { C1: 4, A1: 2 }, {});
+  const r = aLocal(ctx.listarCargasPanel());
+  assert.deepStrictEqual(r.map((c) => c.idCarga).sort(), ['A1', 'V2']);
+});
+
+test('listarCargasPanel: un camión repetido cuya carga que manda ya llegó (cerrada) no sale, aunque haya una abierta vacía igual de vieja', () => {
+  const ctx = contextoPanel([
+    cargaBase({ idCarga: 'C1', estado: 'CERRADA', fechaEntrega: PASADO, horario: '19:00' }),
+    cargaBase({ idCarga: 'A1', estado: 'ABIERTA', fechaEntrega: PASADO, horario: '19:00' })
+  ], { C1: 5 }, {});
+  assert.deepStrictEqual(aLocal(ctx.listarCargasPanel()), []);
+});
+
+test('listarCargasPanel: solo cuenta soportes y palets de lo que se ve y de las cargas repetidas (no de las cerradas que ya llegaron)', () => {
+  const ctx = contextoPanel([
+    cargaBase({ idCarga: 'VISTA', estado: 'ABIERTA', horario: '22:00' }),
+    cargaBase({ idCarga: 'LLEGADA', estado: 'CERRADA', fechaEntrega: PASADO, horario: '10:00' }),
+    cargaBase({ idCarga: 'REP-A', estado: 'CERRADA', horario: '16:00' }),
+    cargaBase({ idCarga: 'REP-B', estado: 'ABIERTA', horario: '16:00' })
+  ], { VISTA: 1, 'REP-A': 3 }, {});
+  ctx.listarCargasPanel();
+  const pedidas = [];
+  ctx._consultas.filter((c) => c.tabla === 'etiquetas').forEach((c) => {
+    /batea_id=in\.\(([^)]*)\)/.exec(c.filtro)[1].split(',').forEach((id) => pedidas.push(decodeURIComponent(id)));
+  });
+  assert.ok(pedidas.indexOf('VISTA') !== -1);
+  assert.ok(pedidas.indexOf('REP-A') !== -1 && pedidas.indexOf('REP-B') !== -1, 'las repetidas se cuentan para decidir');
+  assert.strictEqual(pedidas.indexOf('LLEGADA'), -1, 'una cerrada que ya llegó no se cuenta: no se ve');
+});
+
+test('listarCargasPanel: sin cargas repetidas no hace falta decidir y cada carga se cuenta una sola vez', () => {
+  const ctx = contextoPanel([
+    cargaBase({ idCarga: 'A1', horario: '16:00' }), cargaBase({ idCarga: 'A2', horario: '19:00' })
+  ], { A1: 2, A2: 5 }, {});
+  ctx.listarCargasPanel();
+  assert.strictEqual(ctx._consultas.filter((c) => c.tabla === 'etiquetas').length, 1);
+  assert.strictEqual(ctx._consultas.filter((c) => c.tabla === 'palets').length, 1);
 });
 
 // ───────────────────────── cerrarCarga de una carga reabierta ─────────────────────────

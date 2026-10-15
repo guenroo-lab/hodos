@@ -361,7 +361,8 @@ implementadas: Módulo 1 (carga por lote + etiquetas), Cabecera+Buscadores, Fase
   identifica por destino+fecha+horario y tiene UNA carga para siempre: `obtenerOCrearCarga` busca en
   cualquier estado (abierta → la continúa; cerrada y aún no ha llegado → devuelve `{cerrada, reabrible}`
   para que la pantalla pida confirmar y llame a `reabrirCarga`; cerrada y ya llegó → solo avisa, no crea
-  otra). Hora de llegada = fecha+horario en hora de Madrid (`fechaLlegadaCarga_`, `Utilidades.gs`).
+  otra; con cargas repetidas heredadas manda la que lleva mercancía, `elegirCargaExistente_`). Hora de
+  llegada = fecha+horario en hora de Madrid (`fechaLlegadaCarga_`, `Utilidades.gs`).
   Abrir/reabrir exige 1-2 cargadores de la lista de Cargas/Descargas (copia en `Utilidades.gs`, vigilada
   por `test/cargasReapertura.test.js`; `obtenerCargadores()` la sirve a la pantalla). Columnas nuevas de
   `cargas` (`cargador`, `reabierta_por`, `reabierta_en`, `b2b_conteo`): migración

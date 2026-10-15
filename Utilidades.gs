@@ -465,16 +465,21 @@ function textoLlegadaCarga_(carga) {
   return fecha + ' ' + ((carga && carga.horario) || '');
 }
 
-// Un camión (destino+fecha+horario) = una carga. Si por datos antiguos hay varias, manda la abierta más
-// reciente y, si no hay abierta, la cerrada más reciente.
-function elegirCargaExistente_(cargas) {
-  var masReciente = function (lista) {
-    return lista.slice().sort(function (a, b) {
-      var ta = String(a.fechaCreacion || ''); var tb = String(b.fechaCreacion || '');
-      return tb < ta ? -1 : (tb > ta ? 1 : 0);
-    })[0] || null;
+// Un camión (destino+fecha+horario) = una carga. Si por datos antiguos hay varias del mismo camión (salieron de
+// abrir la pantalla otra vez con la carga ya cerrada, cuando solo se buscaban las abiertas) manda la que lleva
+// mercancía (`contenidos` = {idCarga: soportes + palets}); a igualdad, la abierta y, a igualdad, la más reciente.
+// Sin `contenidos` solo cuentan abierta y reciente. Las demás se ignoran: no se crean, no se muestran, no se tocan.
+function elegirCargaExistente_(cargas, contenidos) {
+  var puntos = function (c) {
+    return ((contenidos && Number(contenidos[c.idCarga]) > 0) ? 2 : 0) + (c.estado === 'ABIERTA' ? 1 : 0);
   };
-  var abiertas = (cargas || []).filter(function (c) { return c.estado === 'ABIERTA'; });
-  if (abiertas.length) return masReciente(abiertas);
-  return masReciente((cargas || []).filter(function (c) { return c.estado === 'CERRADA'; }));
+  var mejor = null;
+  (cargas || []).forEach(function (c) {
+    if (c.estado !== 'ABIERTA' && c.estado !== 'CERRADA') return;
+    if (!mejor) { mejor = c; return; }
+    var pc = puntos(c);
+    var pm = puntos(mejor);
+    if (pc > pm || (pc === pm && String(c.fechaCreacion || '') > String(mejor.fechaCreacion || ''))) mejor = c;
+  });
+  return mejor;
 }

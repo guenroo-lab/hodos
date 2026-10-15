@@ -24,7 +24,12 @@ tenían carga cerrada).
   - cerrada y aún no ha llegado → se pide confirmación y se reabre;
   - cerrada y ya llegó → no se puede modificar ni crear otra (aviso);
   - no existe → se crea.
-  Con duplicados antiguos de la misma terna manda la abierta más reciente y, si no hay, la cerrada más reciente.
+  Con cargas repetidas del mismo camión (herencia de cuando solo se buscaban las abiertas: salieron de abrir
+  la pantalla otra vez con la carga ya cerrada) manda la que **lleva mercancía** (soportes + palets); a
+  igualdad, la abierta; a igualdad, la más reciente. El panel enseña solo esa carga y `obtenerOCrearCarga`
+  abre esa; las repetidas vacías quedan sin tocar en la base (ni se ven ni se continúan). Caso real del
+  15/10 en Marbella: 19:00 = cerrada con 6 soportes y 13 palets (manda) + una abierta vacía; 17:30 =
+  cerrada con 16 palets + una abierta vacía; 22:00 = abierta con 10 soportes + una cerrada vacía.
 - **Hora de llegada** = `fecha_entrega` + `horario` en hora de Madrid. Si el horario no es una hora
   («Envío único diario», Granada) se cuenta hasta el final de ese día.
 - **Cargador**: 1 o 2 personas de la lista (4 principales + 26 auxiliares de Cargas/Descargas, copiadas en
@@ -67,8 +72,11 @@ Hay que aplicarla **antes** de desplegar el código (la apertura escribe `cargad
   (imprimir, borrar, agrupar…), fuera de este alcance.
 - `Pruebas.gs`: la prueba de `obtenerOCrearCarga` usa un horario propio en cada ejecución (un camión = una carga
   para siempre) y comprueba también el caso «cerrada».
-- Coste de lectura del panel: 1 consulta de `cargas` + 1-2 de recuento (`etiquetas`, `palets`) por cada 40 cargas;
-  solo baja la columna `batea_id`. Sin sondeo periódico.
+- Coste de lectura del panel: 1 consulta de `cargas` (todas desde ayer, hace falta ver las del mismo camión) + el
+  recuento (`etiquetas`, `palets`; solo baja la columna `batea_id`, lotes de 40 ids) únicamente de lo que se ve y
+  de las cargas repetidas. Sin sondeo periódico.
+- Decisión entre cargas repetidas: ver «Reglas». `obtenerOCrearCarga` solo cuenta mercancía cuando el camión tiene
+  más de una carga (lo normal es una y no cuesta ninguna lectura más).
 
 ## Fuera de alcance
 

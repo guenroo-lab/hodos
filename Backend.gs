@@ -655,7 +655,10 @@ function obtenerOCrearCarga(destino, fechaEntrega, horario, cargadores) {
   try {
     var existentes = leerCargas_('destino=eq.' + encodeURIComponent(destino) +
       '&fecha_entrega=eq.' + encodeURIComponent(fechaEntrega) + '&horario=eq.' + encodeURIComponent(horario));
-    var elegida = elegirCargaExistente_(existentes);
+    // Con varias cargas del mismo camión (datos antiguos) manda la que lleva mercancía (ver elegirCargaExistente_);
+    // lo normal es una sola y no hace falta contar nada.
+    var contenidos = existentes.length > 1 ? contenidoPorCarga_(existentes) : null;
+    var elegida = elegirCargaExistente_(existentes, contenidos);
     if (elegida && elegida.estado === 'ABIERTA') {
       var cargadoresUnidos = unirCargadores_(elegida.cargador, quienes);
       // Solo se escribe si alguien nuevo se anota (continuar la carga con la misma gente no toca la base).
@@ -740,21 +743,58 @@ function contarPorCarga_(tabla, ids) {
   return cuenta;
 }
 
-// Cargas que se ven en la pantalla del muelle (2026-10-15): las ABIERTAS (de ayer en adelante, para no
-// arrastrar restos viejos) y las CERRADAS cuyo camión aún no ha llegado (se pueden reabrir). Primero las
-// abiertas y dentro de cada grupo por hora de llegada. El cliente no la repite por sondeo (egress de Supabase).
-function listarCargasPanel() {
-  var ahora = new Date().getTime();
-  var hoy = fechaMadridISO_(ahora);
-  var ayer = fechaMadridISO_(ahora - 24 * 3600000);
-  var filas = leerCargas_('or=(and(estado.eq.ABIERTA,fecha_entrega.gte.' + ayer + '),fecha_entrega.gte.' + hoy + ')');
-  var cargas = filas.filter(function (c) {
-    return c.estado === 'ABIERTA' || (c.estado === 'CERRADA' && cargaModificablePorLlegada_(c, ahora));
-  });
-  if (cargas.length === 0) return [];
+// Soportes + palets SIE de cada carga de la lista: {idCarga: n}. Solo se usa para decidir entre cargas
+// repetidas del mismo camión (ver elegirCargaExistente_).
+function contenidoPorCarga_(cargas) {
   var ids = cargas.map(function (c) { return c.idCarga; });
   var soportes = contarPorCarga_('etiquetas', ids);
   var palets = contarPorCarga_('palets', ids);
+  var contenidos = {};
+  ids.forEach(function (id) { contenidos[id] = (soportes[id] || 0) + (palets[id] || 0); });
+  return contenidos;
+}
+
+// Cargas que se ven en la pantalla del muelle (2026-10-15): las ABIERTAS (de ayer en adelante, para no
+// arrastrar restos viejos) y las CERRADAS cuyo camión aún no ha llegado (se pueden reabrir). Primero las
+// abiertas y dentro de cada grupo por hora de llegada. Un camión (destino+fecha+horario) sale UNA vez: si
+// por datos antiguos tiene varias cargas, se ve la misma que abriría obtenerOCrearCarga (la que lleva
+// mercancía). El cliente no la repite por sondeo (egress de Supabase): solo se cuentan soportes y palets de
+// lo que se ve y de las cargas repetidas.
+function listarCargasPanel() {
+  var ahora = new Date().getTime();
+  var ayer = fechaMadridISO_(ahora - 24 * 3600000);
+  var filas = leerCargas_('fecha_entrega=gte.' + ayer);
+  if (filas.length === 0) return [];
+
+  var porCamion = {};
+  var camiones = [];
+  filas.forEach(function (c) {
+    var clave = [c.destino, c.fechaEntrega, c.horario].join('|');
+    if (!porCamion[clave]) { porCamion[clave] = []; camiones.push(clave); }
+    porCamion[clave].push(c);
+  });
+
+  var soportes = {};
+  var palets = {};
+  var contar = function (lista) {
+    var ids = lista.map(function (c) { return c.idCarga; });
+    var s = contarPorCarga_('etiquetas', ids);
+    var p = contarPorCarga_('palets', ids);
+    ids.forEach(function (id) { soportes[id] = s[id] || 0; palets[id] = p[id] || 0; });
+  };
+  var repetidas = [];
+  camiones.forEach(function (k) { if (porCamion[k].length > 1) repetidas = repetidas.concat(porCamion[k]); });
+  if (repetidas.length) contar(repetidas);
+  var contenidos = {};
+  Object.keys(soportes).forEach(function (id) { contenidos[id] = soportes[id] + palets[id]; });
+
+  var cargas = camiones.map(function (k) { return elegirCargaExistente_(porCamion[k], contenidos); }).filter(function (c) {
+    return c && (c.estado === 'ABIERTA' || (c.estado === 'CERRADA' && cargaModificablePorLlegada_(c, ahora)));
+  });
+  if (cargas.length === 0) return [];
+  var sinContar = cargas.filter(function (c) { return soportes[c.idCarga] === undefined; });
+  if (sinContar.length) contar(sinContar);
+
   var items = cargas.map(function (c) {
     var llegada = fechaLlegadaCarga_(c.fechaEntrega, c.horario);
     var abierta = c.estado === 'ABIERTA';

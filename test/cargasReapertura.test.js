@@ -143,6 +143,55 @@ test('elegirCargaExistente_: manda la abierta más reciente; si no hay abierta, 
 
 // ───────────────────────── obtenerOCrearCarga ─────────────────────────
 
+test('elegirCargaExistente_: con cargas repetidas manda la que lleva mercancía, luego la abierta, luego la más reciente', () => {
+  const c = contexto({});
+  const vacia = cargaBase({ idCarga: 'VACIA', estado: 'ABIERTA', fechaCreacion: '2099-10-14T12:00:00Z' });
+  const cerradaConMercancia = cargaBase({ idCarga: 'CERRADA-CON', estado: 'CERRADA', fechaCreacion: '2099-10-14T06:00:00Z' });
+  const abiertaConMercancia = cargaBase({ idCarga: 'ABIERTA-CON', estado: 'ABIERTA', fechaCreacion: '2099-10-14T07:00:00Z' });
+  const otraCerradaConMercancia = cargaBase({ idCarga: 'CERRADA-CON-2', estado: 'CERRADA', fechaCreacion: '2099-10-14T09:00:00Z' });
+  const contenidos = { 'CERRADA-CON': 3, 'ABIERTA-CON': 1, 'CERRADA-CON-2': 20, VACIA: 0 };
+  assert.strictEqual(c.elegirCargaExistente_([vacia, cerradaConMercancia], contenidos).idCarga, 'CERRADA-CON', 'la cerrada con mercancía gana a la abierta vacía');
+  assert.strictEqual(c.elegirCargaExistente_([cerradaConMercancia, abiertaConMercancia, vacia], contenidos).idCarga, 'ABIERTA-CON', 'con mercancía las dos: gana la abierta');
+  assert.strictEqual(c.elegirCargaExistente_([cerradaConMercancia, otraCerradaConMercancia], contenidos).idCarga, 'CERRADA-CON-2', 'a igualdad, la más reciente');
+  assert.strictEqual(c.elegirCargaExistente_([vacia, cargaBase({ idCarga: 'VACIA-CERRADA', estado: 'CERRADA' })], contenidos).idCarga, 'VACIA', 'vacías las dos: la abierta');
+  assert.strictEqual(c.elegirCargaExistente_([vacia, cerradaConMercancia]).idCarga, 'VACIA', 'sin recuento solo cuentan abierta y reciente (como antes)');
+  assert.strictEqual(c.elegirCargaExistente_([cargaBase({ estado: 'ANULADA' })], contenidos), null, 'otros estados se ignoran');
+});
+
+test('obtenerOCrearCarga: con una abierta vacía repetida y una cerrada con mercancía del mismo camión, ofrece reabrir LA CERRADA (no duplica el camión)', () => {
+  let escrito = false;
+  const c = contexto({
+    leerCargas_: () => [
+      cargaBase({ idCarga: 'CARGA-000631', estado: 'CERRADA', horario: '19:00', fechaCreacion: '2099-10-14T06:37:00Z', fechaCierre: '2099-10-14T07:00:00Z' }),
+      cargaBase({ idCarga: 'CARGA-000636', estado: 'ABIERTA', horario: '19:00', fechaCreacion: '2099-10-14T09:48:00Z' })
+    ],
+    supaGet_: (tabla, filtro) => {
+      const ids = /batea_id=in\.\(([^)]*)\)/.exec(filtro)[1].split(',');
+      const por = tabla === 'etiquetas' ? { 'CARGA-000631': 6 } : { 'CARGA-000631': 13 };
+      const filas = [];
+      ids.forEach((id) => { for (let i = 0; i < (por[id] || 0); i++) filas.push({ batea_id: id }); });
+      return filas;
+    },
+    actualizarCarga_: () => { escrito = true; return {}; },
+    insertarCarga_: () => { escrito = true; return {}; }
+  });
+  const r = aLocal(c.obtenerOCrearCarga('Marbella', FUTURO, '19:00', ['Juanlu']));
+  assert.strictEqual(r.idCarga, 'CARGA-000631');
+  assert.strictEqual(r.cerrada, true);
+  assert.strictEqual(r.reabrible, true);
+  assert.strictEqual(escrito, false, 'no se continúa la abierta vacía ni se crea otra');
+});
+
+test('obtenerOCrearCarga: con una sola carga del camión no cuenta soportes ni palets (cero lecturas extra)', () => {
+  let lecturas = 0;
+  const c = contexto({
+    leerCargas_: () => [cargaBase({ estado: 'ABIERTA', cargador: 'Juanlu' })],
+    supaGet_: () => { lecturas++; return []; }
+  });
+  c.obtenerOCrearCarga('Marbella', FUTURO, '22:00', ['Juanlu']);
+  assert.strictEqual(lecturas, 0);
+});
+
 test('obtenerOCrearCarga: sin cargador no hace nada (ni lock ni consulta)', () => {
   let consultas = 0;
   const c = contexto({ leerCargas_: () => { consultas++; return []; } });
