@@ -374,6 +374,14 @@ implementadas: Módulo 1 (carga por lote + etiquetas), Cabecera+Buscadores, Fase
   selector «¿Quién carga?» en el paso 1; el JS va entre las marcas `CARGAS ACTIVAS Y CARGADOR` y se
   prueba en `test/indexCargasPanel.test.js`. La llegada cruzada desde Carta de Portes SIE ya no abre la
   carga sola. `Pruebas.gs` usa un horario propio por ejecución para `obtenerOCrearCarga`.
+- **Sin diálogos nativos del navegador (regla del usuario, 2026-10-15).** `Index.html` no usa `alert()`,
+  `confirm()` ni `prompt()` (salen con la URL fea de googleusercontent.com): avisos con
+  `mostrarModalAviso_(titulo, texto)` y confirmaciones con
+  `mostrarConfirmacion_(mensaje, alConfirmar, titulo, textoBoton, peligro)` (`alConfirmar` se ejecuta dentro del
+  clic de Aceptar; `peligro` = la acción destruye algo: botón rojo y foco inicial en «Cancelar»; Esc cierra el
+  cuadro abierto). Lo vigila `test/indexSinDialogosNativos.test.js` (escáner que ignora comentarios, cadenas y
+  expresiones regulares, también atributos `onclick`) y comprueba el comportamiento de los flujos de
+  administración (borrar, agrupar, copiar, imprimir, guardar).
 
 ## Estructura
 

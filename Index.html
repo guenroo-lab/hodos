@@ -250,6 +250,8 @@
     }
     .btn-primary, .btn-imprimir { width:100%; margin-top:10px; }
     .btn-primary:disabled { opacity:0.5; cursor:wait; }
+    /* Confirmaciones que destruyen algo (borrar, agrupar): el botón principal va en rojo. */
+    .btn-primary.btn-peligro { background:#c62828; color:#fff; }
     .contador-pedidos { font-size:12px; opacity:0.7; margin-top:4px; }
     .aviso-error { color:var(--color-error); font-size:13px; margin-top:8px; }
     .lista-pedidos { margin-top:22px; max-height:220px; overflow-y:auto; }
@@ -1055,7 +1057,7 @@
     <h3 id="modalConfirmarTitulo">Confirmar</h3>
     <p id="modalConfirmarTexto" style="white-space:pre-wrap;"></p>
     <div style="display:flex;gap:10px;justify-content:flex-end;">
-      <button type="button" class="btn-secundario" onclick="cerrarModalConfirmar_()">Cancelar</button>
+      <button type="button" class="btn-secundario" id="modalConfirmarBtnCancelar" onclick="cerrarModalConfirmar_()">Cancelar</button>
       <button type="button" class="btn-primary" id="modalConfirmarBtnOk">Aceptar</button>
     </div>
   </div>
@@ -1373,7 +1375,7 @@
         ifr.contentWindow.focus();
         ifr.contentWindow.print();
       } catch (e) {
-        alert('No se pudo imprimir: ' + e.message);
+        mostrarModalAviso_('No se pudo imprimir', mensajeError_(e));
       }
       setTimeout(function () { document.body.removeChild(ifr); }, 1000);
     });
@@ -1403,13 +1405,14 @@
         }
       })
       .catch(function (err) {
-        var mensaje = 'Error al generar etiquetas: ' + (err && err.message ? err.message : err);
+        var detalle = mensajeError_(err);
+        var mensaje = 'Error al generar etiquetas: ' + detalle;
         if (ventana && !ventana.closed) {
           ventana.document.open();
           ventana.document.write(mensaje);
           ventana.document.close();
         } else {
-          alert(mensaje);
+          mostrarModalAviso_('Error al generar etiquetas', detalle);
         }
       });
   }
@@ -2040,7 +2043,7 @@
     }).then(function () {
       cargarIncpc_();
     }).catch(function (err) {
-      alert('Error al imprimir: ' + (err && err.message ? err.message : err));
+      mostrarModalAviso_('Error al imprimir', mensajeError_(err));
     });
   }
 
@@ -2066,7 +2069,7 @@
     }).then(function () {
       cargarPreparacion_();
     }).catch(function (err) {
-      alert('Error al imprimir: ' + (err && err.message ? err.message : err));
+      mostrarModalAviso_('Error al imprimir', mensajeError_(err));
     });
   }
 
@@ -2106,7 +2109,7 @@
     }).then(function () {
       cargarArrastre_(tab);
     }).catch(function (err) {
-      alert('Error al imprimir: ' + (err && err.message ? err.message : err));
+      mostrarModalAviso_('Error al imprimir', mensajeError_(err));
     });
   }
 
@@ -2307,17 +2310,18 @@
     gas('actualizarSoporteAdmin', idUnico, cambios).then(function () {
       refrescarListaConAcciones_();
     }).catch(function (err) {
-      alert('Error al guardar: ' + (err && err.message ? err.message : err));
+      mostrarModalAviso_('No se pudo guardar', mensajeError_(err));
     });
   }
 
   function borrarSoporteUI_(idUnico) {
-    if (!confirm('¿Borrar el soporte ' + idUnico + '? Esta acción no se puede deshacer.')) return;
-    gas('borrarSoporteAdmin', idUnico).then(function () {
-      refrescarListaConAcciones_();
-    }).catch(function (err) {
-      alert('Error al borrar: ' + (err && err.message ? err.message : err));
-    });
+    mostrarConfirmacion_('¿Borrar el soporte ' + idUnico + '? Esta acción no se puede deshacer.', function () {
+      gas('borrarSoporteAdmin', idUnico).then(function () {
+        refrescarListaConAcciones_();
+      }).catch(function (err) {
+        mostrarModalAviso_('No se pudo borrar', mensajeError_(err));
+      });
+    }, 'Borrar soporte', 'Borrar', true);
   }
 
   // interno, incpc, preparacion y las cuatro de arrastres son las pestañas que pueden
@@ -2351,20 +2355,21 @@
     var idsUnicos = Array.prototype.slice.call(document.querySelectorAll('.chk-soporte:checked'))
       .map(function (chk) { return chk.value; });
     if (idsUnicos.length === 0) {
-      alert('No hay soportes seleccionados.');
+      mostrarModalAviso_('Nada seleccionado', 'No hay soportes seleccionados.');
       return;
     }
-    if (!confirm('¿Borrar ' + idsUnicos.length + ' soporte(s) seleccionados? Esta acción no se puede deshacer.')) return;
-    gas('borrarSoportesAdmin', idsUnicos).then(function (r) {
-      var mensaje = r.borrados.length + ' soporte(s) borrado(s).';
-      if (r.rechazados.length > 0) {
-        mensaje += ' ' + r.rechazados.length + ' no se pudieron borrar (puede que ya se hayan cargado en un camión mientras tanto) — recarga la búsqueda.';
-      }
-      alert(mensaje);
-      refrescarListaConAcciones_();
-    }).catch(function (err) {
-      alert('Error al borrar: ' + (err && err.message ? err.message : err));
-    });
+    mostrarConfirmacion_('¿Borrar ' + idsUnicos.length + ' soporte(s) seleccionados? Esta acción no se puede deshacer.', function () {
+      gas('borrarSoportesAdmin', idsUnicos).then(function (r) {
+        var mensaje = r.borrados.length + ' soporte(s) borrado(s).';
+        if (r.rechazados.length > 0) {
+          mensaje += ' ' + r.rechazados.length + ' no se pudieron borrar (puede que ya se hayan cargado en un camión mientras tanto) — recarga la búsqueda.';
+        }
+        mostrarModalAviso_('Borrado de soportes', mensaje);
+        refrescarListaConAcciones_();
+      }).catch(function (err) {
+        mostrarModalAviso_('No se pudo borrar', mensajeError_(err));
+      });
+    }, 'Borrar soportes', 'Borrar', true);
   }
 
   // Agrupa los soportes marcados en una única etiqueta nueva (agruparSoportesAdmin,
@@ -2377,27 +2382,28 @@
     var idsUnicos = Array.prototype.slice.call(document.querySelectorAll('.chk-soporte:checked'))
       .map(function (chk) { return chk.value; });
     if (idsUnicos.length < 2) {
-      alert('Selecciona al menos 2 soportes para agrupar.');
+      mostrarModalAviso_('Faltan soportes', 'Selecciona al menos 2 soportes para agrupar.');
       return;
     }
-    if (!confirm('¿Agrupar ' + idsUnicos.length + ' soporte(s) en una única etiqueta nueva? Los soportes originales se borran. Esta acción no se puede deshacer.')) return;
-    gas('agruparSoportesAdmin', idsUnicos).then(function (r) {
-      var mensaje = r.cantidadOriginal + ' soporte(s) agrupados en ' + r.idUnicoNuevo + '.';
-      if (r.avisosIncpc && r.avisosIncpc.length > 0) {
-        mensaje += '\n\n⚠ ' + r.avisosIncpc.join('\n');
-      }
-      alert(mensaje);
-      refrescarListaConAcciones_();
-    }).catch(function (err) {
-      alert('Error al agrupar: ' + (err && err.message ? err.message : err));
-    });
+    mostrarConfirmacion_('¿Agrupar ' + idsUnicos.length + ' soporte(s) en una única etiqueta nueva? Los soportes originales se borran. Esta acción no se puede deshacer.', function () {
+      gas('agruparSoportesAdmin', idsUnicos).then(function (r) {
+        var mensaje = r.cantidadOriginal + ' soporte(s) agrupados en ' + r.idUnicoNuevo + '.';
+        if (r.avisosIncpc && r.avisosIncpc.length > 0) {
+          mensaje += '\n\n⚠ ' + r.avisosIncpc.join('\n');
+        }
+        mostrarModalAviso_('Soportes agrupados', mensaje);
+        refrescarListaConAcciones_();
+      }).catch(function (err) {
+        mostrarModalAviso_('No se pudo agrupar', mensajeError_(err));
+      });
+    }, 'Agrupar soportes', 'Agrupar', true);
   }
 
   // Copia los resultados de la última búsqueda (Buscador Interno) al portapapeles
   // como texto separado por tabuladores, para pegar en Excel/Sheets o en un chat.
   function copiarResultadosUI_(btn) {
     if (ultimosResultadosInterno_.length === 0) {
-      alert('No hay resultados para copiar. Busca primero.');
+      mostrarModalAviso_('Nada que copiar', 'No hay resultados para copiar. Busca primero.');
       return;
     }
     var cabecera = ['Nº Pedido', 'Soporte', 'Origen', 'Destino', 'Estado', 'ID único', 'Creado', 'Cargado', 'Llegó', 'Contenido'];
@@ -2420,7 +2426,7 @@
       var original = btn.textContent;
       btn.textContent = ok ? ('¡Copiado! (' + ultimosResultadosInterno_.length + ')') : 'No se pudo copiar';
       setTimeout(function () { btn.textContent = original; }, 1800);
-      if (!ok) alert('No se pudo copiar automáticamente. Selecciona y copia manualmente desde la tabla.');
+      if (!ok) mostrarModalAviso_('No se pudo copiar', 'No se pudo copiar automáticamente. Selecciona y copia manualmente desde la tabla.');
     });
   }
 
@@ -3256,20 +3262,34 @@
   // se ejecuta de forma síncrona dentro del propio click de "Aceptar" (mismo gesto de
   // usuario), así que sigue siendo válido llamar aquí dentro a actualizarUbicacionesSie_()
   // (requisito de Android para el HTTP Shortcut, ver nota junto a esa función).
-  function mostrarConfirmacion_(mensaje, alConfirmar, titulo, textoBoton) {
+  // textoBoton (opcional): lo que dice el botón principal en vez de «Aceptar». peligro (opcional): la acción
+  // destruye algo (borrar, agrupar): el botón sale en rojo y el foco empieza en «Cancelar», para que un Intro
+  // sin querer no borre nada.
+  function mostrarConfirmacion_(mensaje, alConfirmar, titulo, textoBoton, peligro) {
+    var botonOk = document.getElementById('modalConfirmarBtnOk');
     document.getElementById('modalConfirmarTitulo').textContent = titulo || 'Confirmar';
     document.getElementById('modalConfirmarTexto').textContent = mensaje;
-    document.getElementById('modalConfirmarBtnOk').textContent = textoBoton || 'Aceptar';
-    document.getElementById('modalConfirmarBtnOk').onclick = function () {
+    botonOk.textContent = textoBoton || 'Aceptar';
+    botonOk.classList.toggle('btn-peligro', !!peligro);
+    botonOk.onclick = function () {
       cerrarModalConfirmar_();
       alConfirmar();
     };
     document.getElementById('modalConfirmar').classList.remove('vista-oculta');
+    if (peligro) document.getElementById('modalConfirmarBtnCancelar').focus();
   }
 
   function cerrarModalConfirmar_() {
     document.getElementById('modalConfirmar').classList.add('vista-oculta');
   }
+
+  // Esc cierra el cuadro que esté abierto (primero el de confirmación; es un cancelar, nunca confirma).
+  function cerrarModalesConEscape_(ev) {
+    if (ev.key !== 'Escape') return;
+    if (!document.getElementById('modalConfirmar').classList.contains('vista-oculta')) cerrarModalConfirmar_();
+    else if (!document.getElementById('modalAviso').classList.contains('vista-oculta')) cerrarModalAviso_();
+  }
+  document.addEventListener('keydown', cerrarModalesConEscape_);
 
   function cambiarPestana(nombre) {
     // "camion" ya no vive en el panel de administración (tiene su propia URL

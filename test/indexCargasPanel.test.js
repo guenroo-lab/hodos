@@ -131,8 +131,9 @@ test('la llegada cruzada desde Carta de Portes SIE rellena el formulario pero ya
 });
 
 test('mostrarConfirmacion_ admite el texto del botón y por defecto sigue diciendo «Aceptar»', () => {
-  assert.match(html, /function mostrarConfirmacion_\(mensaje, alConfirmar, titulo, textoBoton\)/);
-  assert.match(html, /getElementById\('modalConfirmarBtnOk'\)\.textContent = textoBoton \|\| 'Aceptar';/);
+  // (el comportamiento, incluido el modo «peligro», se ejecuta de verdad en test/indexSinDialogosNativos.test.js)
+  assert.match(html, /function mostrarConfirmacion_\(mensaje, alConfirmar, titulo, textoBoton, peligro\)/);
+  assert.match(html, /botonOk\.textContent = textoBoton \|\| 'Aceptar';/);
 });
 
 test('quitar un soporte o un palet de la carga avisa con el cuadro propio, no con alert()', () => {
