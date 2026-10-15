@@ -385,6 +385,17 @@ implementadas: Módulo 1 (carga por lote + etiquetas), Cabecera+Buscadores, Fase
   cuentan como carga del camión (`elegirCargaExistente_` solo mira ABIERTA/CERRADA). Si la base tuviera un `CHECK`
   sobre `cargas.estado` hay que migrarlo antes de usar «Descartar» (falla sin tocar nada). Tabla de «cuándo
   desaparece cada carga» en el spec. Se comprobaron unas 100 mutaciones (servidor y pantalla): las pruebas fallan con cada una.
+  `cargas.estado` NO tiene `CHECK` (comprobado el 15/10) y «Descartar» ya se ha usado (4 cargas `DESCARTADA`).
+- **Recorte de egress: historial de lotes y subtipos Taisa en Postgres (2026-10-15, HODOS v104, rollback `-V 103`).**
+  `obtenerHistorialLotes` (`Backend.gs`) y `obtenerSubtiposConocidos` (`EstructuraSheets.gs`) ya no bajan la tabla
+  `etiquetas` (7.302 filas): llaman por RPC a `public.historial_lotes(p_limite)` y `public.subtipos_taisa_usados()`
+  (solo `service_role`), definidas en `migraciones/2026-10-15-egress-historial-lotes-y-subtipos.sql` (aplicada con
+  `apply_migration`; vuelta atrás en el `-rollback.sql`, DESPUÉS de volver al código anterior). Desempate: el
+  «primer registro» de un lote es el de menor `id_unico` (el código viejo dependía de un orden de empates sin
+  definir; solo cambia en lotes de Antequera con varios pedidos de proveedor). Pruebas: `test/egressHistorialLotes.test.js`,
+  `herramientas/pruebas-egress-fase2.js` (simulador; contra producción: `OLD_REF=<commit desplegado> UMBRAL_BYTES=1`,
+  el `OLD_REF` por defecto 7f81f28 está desfasado) y `herramientas/pruebas-egress-historial-sql.js` (SQL real en
+  PGlite: `PGLITE_DIR=<carpeta con @electric-sql/pglite>`).
 - **Sin diálogos nativos del navegador (regla del usuario, 2026-10-15).** `Index.html` no usa `alert()`,
   `confirm()` ni `prompt()` (salen con la URL fea de googleusercontent.com): avisos con
   `mostrarModalAviso_(titulo, texto)` y confirmaciones con
