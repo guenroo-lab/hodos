@@ -60,7 +60,24 @@ module.exports = [
   ['obtenerHistorialLotes: pone la fecha de otro campo', 'Backend.gs', s => s
     .replace("fecha: fechaComoTexto(f.fecha_creacion)", "fecha: fechaComoTexto(f.origen_texto)")],
   ['obtenerHistorialLotes: el más antiguo primero', 'Backend.gs', s => s
-    .replace("return supaRpc_('historial_lotes', { p_limite: n }).map(", "return supaRpc_('historial_lotes', { p_limite: n }).reverse().map(")],
+    .replace("var filas = supaRpc_('historial_lotes', { p_limite: n });", "var filas = supaRpc_('historial_lotes', { p_limite: n }).reverse();")],
+  // --- números de pedido de cada lote del historial (v105)
+  ['historial pedidos: no separa un soporte agrupado «a+b»', 'Backend.gs', s => s
+    .replace("tokensPedido_(f.numero_pedido)", "[f.numero_pedido]")],
+  ['historial pedidos: repite los números', 'Backend.gs', s => s
+    .replace("porLote[id] = distintosTexto_(porLote[id]);", "porLote[id] = porLote[id];")],
+  ['historial pedidos: sin orden de lectura', 'Backend.gs', s => s
+    .replace("+ ')&order=fecha_creacion.asc,id_unico.asc';", "+ ')';")],
+  ['historial pedidos: orden descendente', 'Backend.gs', s => s
+    .replace("&order=fecha_creacion.asc,id_unico.asc'", "&order=fecha_creacion.desc,id_unico.desc'")],
+  ['historial pedidos: lee los pedidos de los lotes que NO salen', 'Backend.gs', s => s
+    .replace("'lote_id=in.(' + trozo.map(function (id) { return encodeURIComponent(id); }).join(',') + ')&order=fecha_creacion", "'lote_id=not.in.(' + trozo.map(function (id) { return encodeURIComponent(id); }).join(',') + ')&order=fecha_creacion")],
+  ['historial pedidos: solo lee el primer trozo de lotes', 'Backend.gs', s => s
+    .replace("for (var i = 0; i < ids.length; i += LOTE_IDS_HISTORIAL_) {", "for (var i = 0; i < Math.min(ids.length, 1); i += LOTE_IDS_HISTORIAL_) {")],
+  ['historial pedidos: los asigna a otro lote', 'Backend.gs', s => s
+    .replace("pedidos: pedidos[f.lote_id] || [] }", "pedidos: pedidos[(filas[0] || {}).lote_id] || [] }")],
+  ['historial pedidos: lee todas las etiquetas en vez de las de los lotes', 'Backend.gs', s => s
+    .replace("supaGet_('etiquetas', filtro, 'lote_id,numero_pedido')", "supaGet_('etiquetas', 'order=fecha_creacion.asc,id_unico.asc', 'lote_id,numero_pedido')")],
   ['obtenerHistorialLotes: el tope baja de 1000 a 500', 'Backend.gs', s => s
     .replace("|| 10, 1), 1000);", "|| 10, 1), 500);")],
   ['obtenerHistorialLotes: el límite como texto («4») se ignora', 'Backend.gs', s => s

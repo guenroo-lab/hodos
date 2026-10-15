@@ -396,6 +396,15 @@ implementadas: Módulo 1 (carga por lote + etiquetas), Cabecera+Buscadores, Fase
   `herramientas/pruebas-egress-fase2.js` (simulador; contra producción: `OLD_REF=<commit desplegado> UMBRAL_BYTES=1`,
   el `OLD_REF` por defecto 7f81f28 está desfasado) y `herramientas/pruebas-egress-historial-sql.js` (SQL real en
   PGlite: `PGLITE_DIR=<carpeta con @electric-sql/pglite>`).
+- **Números de pedido en el «Historial reciente» (2026-10-15, v105).** Cada lote del historial enseña debajo de su línea
+  los números de pedido que se registraron en él (los 30 primeros a la vista y el resto tras «+N más», un `<details>`).
+  `obtenerHistorialLotes` sigue pidiendo los 10 lotes a la RPC y añade `pedidos` con `obtenerPedidosPorLote_`: UNA
+  lectura de `etiquetas` (`lote_id,numero_pedido`, `lote_id=in.(…)`, orden `fecha_creacion,id_unico`) solo de los lotes que
+  salen, en trozos de 40 ids por el límite de 2 KB de URL; un soporte agrupado «a+b» aporta `a` y `b`, sin repetir. Si esa
+  lectura falla el historial sale igual, sin números, y queda un `AVISO` en el registro de ejecuciones. La cifra «N pedidos»
+  de cada lote es el nº de ETIQUETAS (soportes), no de pedidos distintos: puede ser mayor que la lista de números.
+  Pruebas: `test/egressHistorialLotes.test.js` (servidor), `test/indexHistorialPedidos.test.js` (pantalla) y el banco
+  `pruebas-egress-fase2.js` (lotes con varios pedidos; `OLD_REF=4ddeeef UMBRAL_BYTES=1.05 SIN_TOPES_ACCION=1`).
 - **Sin diálogos nativos del navegador (regla del usuario, 2026-10-15).** `Index.html` no usa `alert()`,
   `confirm()` ni `prompt()` (salen con la URL fea de googleusercontent.com): avisos con
   `mostrarModalAviso_(titulo, texto)` y confirmaciones con

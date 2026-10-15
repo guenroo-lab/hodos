@@ -29,6 +29,10 @@
  *       OLD_REF=7f81f28 SEMILLAS=60 node herramientas/pruebas-egress-fase2.js
  *       # contra producción v100 (ya con la Fase 2): UMBRAL_BYTES=1 solo exige que los bytes no suban
  *       OLD_REF=5ac0edc UMBRAL_BYTES=1 node herramientas/pruebas-egress-fase2.js
+ *       # contra producción v104 (RPC ya desplegadas; el historial ahora lee además los números de pedido de SUS
+ *       # lotes, así que los bytes suben un poco y los topes por acción no aplican):
+ *       OLD_REF=4ddeeef UMBRAL_BYTES=1.05 SIN_TOPES_ACCION=1 node herramientas/pruebas-egress-fase2.js
+ *       # (con una base que no devuelve `pedidos` se compara sin ese campo y los números se verifican aparte)
  *
  * No toca Supabase, Sheets ni Drive reales.
  */
@@ -305,11 +309,14 @@ function generarDatos(semilla, opciones) {
     lote++;
     const origen = el(ORIGENES);
     const destino = el(TIENDAS);
-    const ped = r() < 0.12 ? String(ent(100000, 999999)) + '+' + String(ent(100000, 999999)) : String(ent(100000, 999999));
-    const total = r() < 0.7 ? 1 : ent(2, 4);
     const fecha = iso(T0 - (r() < 0.3 ? r() * 30 * H : r() * 12 * 24 * H));
     const subtipo = origen === 'Taisa' ? el(SUBTIPOS) : (r() < 0.04 ? 'ANOMALO' : null); // 'ANOMALO': subtipo en un origen que no es Taisa (no debe salir)
     const pend = r() < 0.12;
+    // Un lote real lleva varios pedidos (la lista que se pega) y todos comparten fecha_creacion; los hay de uno solo.
+    const nPed = r() < 0.35 ? ent(2, 7) : 1;
+    for (let q = 0; q < nPed; q++) {
+    const ped = r() < 0.12 ? String(ent(100000, 999999)) + '+' + String(ent(100000, 999999)) : String(ent(100000, 999999));
+    const total = r() < 0.7 ? 1 : ent(2, 4);
     for (let s = 1; s <= total; s++) {
       n++;
       const registrado = r() < 0.55;
@@ -324,6 +331,7 @@ function generarDatos(semilla, opciones) {
         fecha_envio: carga ? iso(T0 - r() * 5 * 24 * H) : null, origen_tienda: origen === 'Cesión' ? el(TIENDAS) : null,
         razon_flujo: r() < 0.1 ? 'Sobrante' : null, pendiente_impresion_incpc: pend ? true : (r() < 0.5 ? false : null), expedicion: r() < 0.2 ? 'EXP' + ent(1, 9) : null
       });
+    }
     }
   }
   // dos lotes con exactamente la misma fecha_creacion (empate entre lotes; sin esto, el orden del historial no se prueba)
@@ -420,14 +428,23 @@ function escenarios(datos, semilla) {
 
 // ------------------------------------------------------- ejecución comparada
 const reemplazo = (k, v) => (v === undefined ? '__undef__' : v);
-function ejecutar(cx, datos, fn) {
+// obtenerHistorialLotes devuelve además `pedidos` (2026-10-15, v105). Contra una base que aún no los devuelve se
+// compara SIN ese campo (solo en esas acciones: otras llevan campos con ese nombre) y los números se comprueban
+// aparte, contra los datos (pedidosDelHistorialMal).
+const reemplazoSinPedidos = (k, v) => (k === 'pedidos' ? undefined : reemplazo(k, v));
+const esHistorial = (nombre) => /^obtenerHistorialLotes/.test(nombre);
+function ejecutar(cx, datos, fn, sinPedidos) {
   cx.estado.tablas = clonar(datos);
   cx.registro.length = 0; cx.logs.length = 0; cx.efectos.length = 0;
-  let ret;
-  try { ret = JSON.stringify(fn(cx.ctx), reemplazo); } catch (e) { ret = 'ERROR: ' + e.message; }
+  let ret, retCompleto;
+  try {
+    const valor = fn(cx.ctx);
+    ret = JSON.stringify(valor, sinPedidos ? reemplazoSinPedidos : reemplazo);
+    retCompleto = sinPedidos ? JSON.stringify(valor, reemplazo) : ret;
+  } catch (e) { ret = retCompleto = 'ERROR: ' + e.message; }
   const lect = cx.registro.filter(p => p.metodo === 'get' || p.lectura); // GET + RPC de solo lectura
   return {
-    ret, db: JSON.stringify(cx.estado.tablas),
+    ret, retCompleto, db: JSON.stringify(cx.estado.tablas),
     escrituras: JSON.stringify(cx.registro.filter(p => p.metodo !== 'get' && !p.lectura).map(p => [p.metodo, p.tabla, p.url, p.payload])),
     logs: JSON.stringify(cx.logs), efectos: JSON.stringify(cx.efectos),
     reg: cx.registro.map(p => p.metodo + ' ' + p.tabla + ' ' + (p.url || '').slice(0, 100) + (p.filas !== undefined ? ' -> ' + p.filas : '')),
@@ -436,6 +453,22 @@ function ejecutar(cx, datos, fn) {
   };
 }
 const comparar2 = (a, b) => ['ret', 'db', 'escrituras', 'logs', 'efectos'].filter(k => a[k] !== b[k]);
+
+// Los números de pedido que debe llevar cada lote del historial, calculados aquí desde los datos (no con el código
+// del servidor): los de sus soportes por (fecha_creacion, id_unico), un soporte agrupado «a+b» aporta a y b, sin repetir.
+// Devuelve cuántos lotes del resultado llevan una lista distinta de esa.
+function pedidosDelHistorialMal(datos, retJson) {
+  let lotes;
+  try { lotes = JSON.parse(retJson); } catch (e) { return 1; }
+  if (!Array.isArray(lotes)) return 0; // un error u otra respuesta: lo cubre la comparación normal
+  const antes = (a, b) => (Date.parse(a.fecha_creacion) - Date.parse(b.fecha_creacion)) || (a.id_unico < b.id_unico ? -1 : a.id_unico > b.id_unico ? 1 : 0);
+  return lotes.filter(l => {
+    const esperados = [];
+    datos.etiquetas.filter(e => e.lote_id === l.loteId).sort(antes)
+      .forEach(e => String(e.numero_pedido).split('+').map(t => t.trim()).filter(Boolean).forEach(t => { if (esperados.indexOf(t) === -1) esperados.push(t); }));
+    return JSON.stringify(l.pedidos) !== JSON.stringify(esperados);
+  }).length;
+}
 
 function main() {
   const nuevo = leerNuevo(), viejo = leerViejo();
@@ -456,12 +489,15 @@ function main() {
   conjuntos.push([902, generarDatos(902, { nEtiquetas: 2500, nCargas: 60 }), 'conjunto grande (>1000 etiquetas)']);
   conjuntos.push([903, generarDatos(903, { nEtiquetas: 0, nCargas: 0 }), 'vacío']);
   const porNombre = {};
+  let historiales = 0, pedidosMalos = 0;
   let total = 0, malas = 0, filasV = 0, filasN = 0, bytesV = 0, bytesN = 0, petV = 0, petN = 0, enterasV = 0, enterasN = 0;
   for (const [seed, datos, etiqueta] of conjuntos) {
     for (const [nombre, fn] of escenarios(datos, seed)) {
       if (process.env.SOLO && !new RegExp(process.env.SOLO).test(nombre)) continue;
-      const a = ejecutar(cxV, datos, fn), b = ejecutar(cxN, datos, fn);
+      const hist = esHistorial(nombre);
+      const a = ejecutar(cxV, datos, fn, hist), b = ejecutar(cxN, datos, fn, hist);
       const difs = comparar2(a, b);
+      if (hist) { historiales++; pedidosMalos += pedidosDelHistorialMal(datos, b.retCompleto); }
       if (process.env.VERBOSO && difs.length) { console.log('--- ' + etiqueta + ' · ' + nombre + ' · viejo:'); a.reg.forEach(x => console.log('   V ' + x)); console.log('--- nuevo:'); b.reg.forEach(x => console.log('   N ' + x)); }
       total++;
       const base = nombre.replace(/\(CARGA-\d+/, '(CARGA-n').replace(/\(.*\)$/, '(…)');
@@ -478,6 +514,7 @@ function main() {
     }
   }
   ok(malas === 0, malas + ' de ' + total + ' ejecuciones con resultado/estado/escrituras distintos (esperado 0)');
+  ok(historiales > 0 && pedidosMalos === 0, 'números de pedido del historial: ' + pedidosMalos + ' lotes con una lista distinta de la calculada desde los datos, en ' + historiales + ' llamadas (esperado 0)');
 
   console.log('== 2. Lo que se lee, por acción (suma de todas las ejecuciones) ==');
   Object.keys(porNombre).forEach(n => {
@@ -488,14 +525,25 @@ function main() {
   // Contra la base de la Fase 2 (7f81f28) se exige −60 %; contra una base que ya la incluye (p.ej. producción
   // 5ac0edc, para el historial de lotes y los subtipos) solo que no suba: lo que baja ahí se ve en la sección 2.
   const umbralBytes = Number(process.env.UMBRAL_BYTES || 0.4);
-  ok(bytesN < bytesV * umbralBytes, 'los bytes leídos bajan más de un ' + Math.round(100 * (1 - umbralBytes)) + ' %');
+  ok(bytesN < bytesV * umbralBytes, umbralBytes < 1 ? 'los bytes leídos bajan más de un ' + Math.round(100 * (1 - umbralBytes)) + ' %' : 'los bytes leídos no suben más de un ' + Math.round(100 * (umbralBytes - 1)) + ' %');
   // Historial: del orden de la tabla entera a ≤10 filas por llamada (−98 % aquí; en producción 7.246 -> 10).
   // Subtipos: de una fila por etiqueta Taisa a una por subtipo distinto (los datos sintéticos son pequeños:
   // en producción 2.508 -> 26, −99 %).
-  [['obtenerHistorialLotes', 0.1], ['obtenerSubtiposConocidos', 0.25]].forEach(([accion, tope]) => {
-    const f = porNombre[accion + '(…)'];
-    if (f) ok(f.filasN <= f.filasV * tope && f.bytesN <= f.bytesV * tope, accion + ': filas ' + f.filasV + ' -> ' + f.filasN + ' y bytes ' + f.bytesV + ' -> ' + f.bytesN + ' (esperado: −' + Math.round(100 * (1 - tope)) + ' % o más)');
+  // (Solo contra una base ANTERIOR a las RPC, p.ej. OLD_REF=5ac0edc; contra una que ya las lleva, SIN_TOPES_ACCION=1.)
+  if (process.env.SIN_TOPES_ACCION !== '1') {
+    [['obtenerHistorialLotes', 0.1], ['obtenerSubtiposConocidos', 0.25]].forEach(([accion, tope]) => {
+      const f = porNombre[accion + '(…)'];
+      if (f) ok(f.filasN <= f.filasV * tope && f.bytesN <= f.bytesV * tope, accion + ': filas ' + f.filasV + ' -> ' + f.filasN + ' y bytes ' + f.bytesV + ' -> ' + f.bytesN + ' (esperado: −' + Math.round(100 * (1 - tope)) + ' % o más)');
+    });
+  }
+  // Sea cual sea la base: ni el historial (con sus números de pedido) ni los subtipos leen jamás la tabla entera.
+  ['obtenerHistorialLotes(…)', 'obtenerHistorialLotesMaximo(…)', 'obtenerSubtiposConocidos(…)'].forEach(accion => {
+    const f = porNombre[accion];
+    if (f) ok(f.enterasN === 0, accion + ': lecturas enteras de etiquetas = ' + f.enterasN + ' (esperado 0)');
   });
+  // El historial lee, además de las 10 filas de los lotes, solo los números de pedido de ESOS lotes.
+  { const f = porNombre['obtenerHistorialLotes(…)'];
+    if (f) { console.log('   historial con números de pedido: ' + Math.round(f.filasN / f.n) + ' filas y ' + (f.bytesN / f.n / 1024).toFixed(1) + ' KB por llamada de media (' + f.n + ' llamadas simuladas)'); } }
   ok(petN <= petV * 1.6, 'el nº de peticiones no se dispara (' + petV + ' -> ' + petN + ')');
 
   console.log('== 3. Mutaciones: el banco tiene que detectarlas ==');
@@ -509,10 +557,12 @@ function main() {
     try { cxM = crearContexto(mutado); } catch (e) { detectada = true; }
     for (const [seed, datos] of conjuntoMut) {
       if (detectada) break;
-      for (const [, fn] of escenarios(datos, seed)) {
-        const a = ejecutar(cxV, datos, fn);
-        let b; try { b = ejecutar(cxM, datos, fn); } catch (e) { detectada = true; break; }
+      for (const [nombreEsc, fn] of escenarios(datos, seed)) {
+        const hist = esHistorial(nombreEsc);
+        const a = ejecutar(cxV, datos, fn, hist);
+        let b; try { b = ejecutar(cxM, datos, fn, hist); } catch (e) { detectada = true; break; }
         if (comparar2(a, b).length) { detectada = true; break; }
+        if (hist && (pedidosDelHistorialMal(datos, b.retCompleto) || b.enteras > 0)) { detectada = true; break; } // números mal, o lee la tabla entera
       }
     }
     ok(detectada, 'mutación detectada: ' + nombre);

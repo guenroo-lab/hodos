@@ -149,9 +149,38 @@ function obtenerHistorialLotes(limite) {
   limite = limite || 10;
   // Tope 1000 = Max Rows de PostgREST: supaRpc_ no pagina y una respuesta mayor se cortaría en silencio.
   var n = Math.min(Math.max(Math.floor(Number(limite)) || 10, 1), 1000);
-  return supaRpc_('historial_lotes', { p_limite: n }).map(function (f) {
-    return { loteId: f.lote_id, cantidad: f.cantidad, origenTexto: f.origen_texto, destino: f.destino, fecha: fechaComoTexto(f.fecha_creacion) };
+  var filas = supaRpc_('historial_lotes', { p_limite: n });
+  // Los números de pedido de cada lote (el historial los enseña debajo de cada línea). Es un añadido: si la
+  // lectura falla el historial sigue saliendo, sin números, y el motivo queda en el registro de ejecuciones.
+  var pedidos = {};
+  try {
+    pedidos = obtenerPedidosPorLote_(filas.map(function (f) { return f.lote_id; }));
+  } catch (e) {
+    Logger.log('AVISO obtenerHistorialLotes: no se pudieron leer los números de pedido: ' + e.message);
+  }
+  return filas.map(function (f) {
+    return { loteId: f.lote_id, cantidad: f.cantidad, origenTexto: f.origen_texto, destino: f.destino, fecha: fechaComoTexto(f.fecha_creacion), pedidos: pedidos[f.lote_id] || [] };
   });
+}
+
+var LOTE_IDS_HISTORIAL_ = 40;
+
+// Números de pedido de cada lote, en el orden de sus soportes y sin repetir (un soporte agrupado «100+200»
+// aporta los dos, por separado). Una sola lectura ligera (lote_id + numero_pedido) de SOLO los lotes que
+// salen en el historial, en trozos para no pasar de los 2 KB de URL de UrlFetchApp: { loteId: ['100', ...] }.
+function obtenerPedidosPorLote_(idsLote) {
+  var ids = distintosTexto_(idsLote);
+  var porLote = {};
+  for (var i = 0; i < ids.length; i += LOTE_IDS_HISTORIAL_) {
+    var trozo = ids.slice(i, i + LOTE_IDS_HISTORIAL_);
+    var filtro = 'lote_id=in.(' + trozo.map(function (id) { return encodeURIComponent(id); }).join(',') + ')&order=fecha_creacion.asc,id_unico.asc';
+    supaGet_('etiquetas', filtro, 'lote_id,numero_pedido').forEach(function (f) {
+      if (!porLote[f.lote_id]) porLote[f.lote_id] = [];
+      Array.prototype.push.apply(porLote[f.lote_id], tokensPedido_(f.numero_pedido));
+    });
+  }
+  Object.keys(porLote).forEach(function (id) { porLote[id] = distintosTexto_(porLote[id]); });
+  return porLote;
 }
 
 // ── Generación del HTML de etiquetas para impresión (siempre en servidor: ver

@@ -260,6 +260,8 @@
       background:var(--input-bg); padding:10px 12px; margin-bottom:8px; border-radius:6px;
       border-left:3px solid var(--color-accent); font-size:12.5px; display:flex; justify-content:space-between;
     }
+    .historial-numeros { display:block; margin-top:5px; font-size:11.5px; opacity:0.8; line-height:1.55; word-break:break-word; }
+    .historial-mas > summary { cursor:pointer; color:var(--color-accent-text); font-weight:700; }
     .etiquetas-preview { margin-top:14px; padding:14px; background:var(--input-bg); border-radius:8px; font-size:13px; max-height:280px; overflow-y:auto; }
 
     /* ── Contenido opcional por soporte ── */
@@ -1480,6 +1482,17 @@
     imprimirHtmlEtiquetas_(gas('htmlPendientesTienda', tienda));
   }
 
+  // Debajo de cada lote del historial: los números de pedido que se registraron en él. Los primeros 30 a la
+  // vista y, si hay más, el resto tras «+N más» (un <details>: sin JS y sin cuadros del navegador).
+  var MAX_PEDIDOS_HISTORIAL_ = 30;
+  function htmlNumerosPedidoHistorial_(pedidos) {
+    if (!pedidos || pedidos.length === 0) return '';
+    var vistos = pedidos.slice(0, MAX_PEDIDOS_HISTORIAL_).map(function (p) { return escapeHtml_(p); }).join(' &middot; ');
+    var resto = pedidos.slice(MAX_PEDIDOS_HISTORIAL_);
+    var mas = resto.length ? '<details class="historial-mas"><summary>+' + resto.length + ' más</summary>' + resto.map(function (p) { return escapeHtml_(p); }).join(' &middot; ') + '</details>' : '';
+    return '<span class="historial-numeros">' + vistos + mas + '</span>';
+  }
+
   function cargarHistorial() {
     gas('obtenerHistorialLotes', 10).then(function (lotes) {
       var cont = document.getElementById('historialPedidos');
@@ -1488,7 +1501,7 @@
         return;
       }
       cont.innerHTML = lotes.map(function (l) {
-        return '<div class="pedido-item"><span><strong>' + l.cantidad + ' pedidos</strong> | ' + escapeHtml_(l.origenTexto) + ' &rarr; ' + escapeHtml_(l.destino) + '</span></div>';
+        return '<div class="pedido-item"><span><strong>' + l.cantidad + ' pedidos</strong> | ' + escapeHtml_(l.origenTexto) + ' &rarr; ' + escapeHtml_(l.destino) + htmlNumerosPedidoHistorial_(l.pedidos) + '</span></div>';
       }).join('');
     }).catch(function (err) {
       console.error('obtenerHistorialLotes error:', err);
