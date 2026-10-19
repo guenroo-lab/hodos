@@ -486,7 +486,9 @@
     .refill-badge-ENVIADO { background:#1d6fb8; }
     .refill-badge-ENTREGADO { background:#147638; }
     .refill-estado-texto { font-size:12.5px; opacity:0.8; margin-top:6px; }
-    .refill-datos { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px 18px; margin:12px 0 0; }
+    .refill-seccion { margin-top:14px; padding-top:10px; border-top:1px dashed var(--input-border); font-size:11px; font-weight:800; letter-spacing:0.6px; text-transform:uppercase; color:var(--color-accent-text); }
+    .refill-relativo { display:block; margin-top:2px; font-size:12px; font-weight:700; color:var(--color-accent-text); }
+    .refill-datos { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px 18px; margin:8px 0 0; }
     .refill-datos > div { min-width:0; }
     .refill-datos dt { font-size:10.5px; letter-spacing:0.5px; text-transform:uppercase; opacity:0.65; }
     .refill-datos dd { margin:2px 0 0; font-size:13.5px; font-weight:600; word-break:break-word; }
@@ -1538,31 +1540,65 @@
     return '<div><dt>' + titulo + '</dt><dd' + (clase ? ' class="' + clase + '"' : '') + '>' + valorHtml + '</dd></div>';
   }
 
-  function htmlTarjetaRefill_(r) {
+  // Cuánto falta (o cuánto hace) para la llegada: «llega en 22 h», «llegó hace 3 h». El reloj es el de este equipo.
+  function duracionCortaRefill_(ms) {
+    var min = Math.round(Math.abs(ms) / 60000);
+    if (min < 60) return min + ' min';
+    var horas = Math.round(min / 60);
+    if (horas < 48) return horas + ' h';
+    return Math.round(horas / 24) + ' días';
+  }
+
+  function textoRelativoLlegadaRefill_(llegadaEn, ahoraMs) {
+    var t = Date.parse(llegadaEn || '');
+    if (isNaN(t)) return '';
+    var dif = t - ahoraMs;
+    if (Math.abs(dif) < 60000) return 'llega ahora';
+    return dif > 0 ? 'llega en ' + duracionCortaRefill_(dif) : 'llegó hace ' + duracionCortaRefill_(dif);
+  }
+
+  var TEXTO_INFORME_REFILL_ = { ENVIADO: 'Enviado a la tienda', PRUEBA: 'Modo prueba (no se envió)', ERROR: 'Falló el envío', NO_ENVIADO: 'No enviado' };
+
+  // Dos bloques por palet: el PALET (qué es y si cuadra con el inventario) y el CAMIÓN en el que va (la carga: cuándo
+  // se cargó y se cerró, cuándo llega a su destino y qué más lleva). HODOS no guarda matrícula ni transportista: el
+  // «camión» es la carga (tienda + fecha + horario).
+  function htmlTarjetaRefill_(r, ahoraMs) {
+    ahoraMs = ahoraMs == null ? Date.now() : ahoraMs;
     var estado = ETIQUETA_ESTADO_REFILL_[r.estado] ? r.estado : 'SIN_CARGA';
-    var datos = htmlDatoRefill_('Código LM', r.codigoLm ? escapeHtml_(r.codigoLm) : '—')
+    var palet = htmlDatoRefill_('Código LM', r.codigoLm ? escapeHtml_(r.codigoLm) : '—')
       + htmlDatoRefill_('Sección', r.seccion ? escapeHtml_(r.seccion) : '—')
-      + htmlDatoRefill_('Carga', r.idCarga ? escapeHtml_(r.idCarga) + (r.destino ? ' · ' + escapeHtml_(r.destino) : '') : '—')
-      + htmlDatoRefill_('Llegada prevista', r.fechaEntrega ? escapeHtml_(fechaCortaRefill_(r.fechaEntrega) + (r.horario ? ' ' + r.horario : '')) : '—')
       + htmlDatoRefill_('Escaneado', r.escaneadoEn ? escapeHtml_(formatearFechaHora_(r.escaneadoEn)) : '—')
       + htmlDatoRefill_('Inventario', escapeHtml_(TEXTO_COTEJO_REFILL_[r.cotejo] || TEXTO_COTEJO_REFILL_.SIN_COTEJAR), r.cotejo === 'NO_ENCONTRADO' ? 'refill-no-coincide' : '');
-    if (r.cargador) datos += htmlDatoRefill_('Cargador', escapeHtml_(r.cargador));
     if (r.solicitadoPor && (r.solicitadoPor.ldap || r.solicitadoPor.motivo)) {
-      datos += htmlDatoRefill_('Solicitado por', escapeHtml_(r.solicitadoPor.ldap || '—') + (r.solicitadoPor.motivo ? ' — ' + escapeHtml_(r.solicitadoPor.motivo) : ''));
+      palet += htmlDatoRefill_('Solicitado por', escapeHtml_(r.solicitadoPor.ldap || '—') + (r.solicitadoPor.motivo ? ' — ' + escapeHtml_(r.solicitadoPor.motivo) : ''));
+    }
+    var camion = htmlDatoRefill_('Camión (carga)', r.idCarga ? escapeHtml_(r.idCarga) + (r.destino ? ' · ' + escapeHtml_(r.destino) : '') : '—');
+    if (r.idCarga && r.destino) {
+      if (r.cargaEmpezadaEn) camion += htmlDatoRefill_('Empezó a cargarse', escapeHtml_(formatearFechaHora_(r.cargaEmpezadaEn)));
+      if (r.cerradaEn) camion += htmlDatoRefill_('Cargado y cerrado', escapeHtml_(formatearFechaHora_(r.cerradaEn)) + (r.cerradaPor ? ' · ' + escapeHtml_(r.cerradaPor) : ''));
+      else if (estado === 'EN_CARGA') camion += htmlDatoRefill_('Cargado y cerrado', 'Aún no: la carga sigue abierta');
+      if (r.informe && TEXTO_INFORME_REFILL_[r.informe]) camion += htmlDatoRefill_('Informe a la tienda', escapeHtml_(TEXTO_INFORME_REFILL_[r.informe]));
+      var relativo = textoRelativoLlegadaRefill_(r.llegadaEn, ahoraMs);
+      camion += htmlDatoRefill_('Llega a destino', r.fechaEntrega
+        ? escapeHtml_(r.destino + ' · ' + fechaCortaRefill_(r.fechaEntrega) + (r.horario ? ' ' + r.horario : '')) + (relativo ? '<span class="refill-relativo">' + escapeHtml_(relativo) + '</span>' : '')
+        : '—');
+      if (r.lleva) camion += htmlDatoRefill_('Lleva', escapeHtml_(r.lleva.palets + ' palet' + (r.lleva.palets === 1 ? '' : 's') + ' refill · ' + r.lleva.pedidos + ' pedido' + (r.lleva.pedidos === 1 ? '' : 's') + ' cliente'));
+      if (r.cargador) camion += htmlDatoRefill_('Cargador', escapeHtml_(r.cargador));
     }
     return '<div class="refill-card refill-' + estado + '">'
       + '<div class="refill-cab"><span class="refill-badge refill-badge-' + estado + '">' + ETIQUETA_ESTADO_REFILL_[estado] + '</span><span class="valor-sscc">' + escapeHtml_(r.sscc) + '</span></div>'
       + '<div class="refill-estado-texto">' + escapeHtml_(r.estadoTexto || '') + '</div>'
-      + '<dl class="refill-datos">' + datos + '</dl></div>';
+      + '<div class="refill-seccion">Palet</div><dl class="refill-datos">' + palet + '</dl>'
+      + '<div class="refill-seccion">Camión</div><dl class="refill-datos">' + camion + '</dl></div>';
   }
 
-  function htmlResultadosRefill_(datos) {
+  function htmlResultadosRefill_(datos, ahoraMs) {
     var lista = (datos && datos.resultados) || [];
     if (lista.length === 0) {
       return '<p class="sin-resultados">No hay ningún refill con esos datos. Solo constan los palets escaneados en una carga desde HODOS.</p>';
     }
     return '<div class="tabla-titulo"><span class="badge-origen badge-origen-sie">SIE</span><span>Palets refill</span><span class="tabla-contador">' + lista.length + (datos.hayMas ? '+' : '') + '</span></div>'
-      + lista.map(function (r) { return htmlTarjetaRefill_(r); }).join('')
+      + lista.map(function (r) { return htmlTarjetaRefill_(r, ahoraMs); }).join('')
       + (datos.hayMas ? '<p class="refill-aviso-mas">Hay más resultados de los que se muestran. Escribe más cifras para afinar la búsqueda.</p>' : '');
   }
 

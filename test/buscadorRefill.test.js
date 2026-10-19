@@ -15,25 +15,46 @@ function contexto(stubs) {
 const plano = (x) => JSON.parse(JSON.stringify(x));
 
 const palet = (extra) => Object.assign({ id: 1, sscc: '184000227900304411', codigo_lm: '92186704', seccion: 'JARDIN', encontrado: true, batea_id: 'CARGA-000657', fecha_creacion: '2026-10-19T07:46:12.911+00:00' }, extra);
-const carga = (extra) => Object.assign({ id_carga: 'CARGA-000657', destino: 'Mijas', fecha_entrega: '2026-10-20', horario: '8:00', estado: 'CERRADA', cargador: 'Ana', reabierta_en: null }, extra);
+const carga = (extra) => Object.assign({
+  id_carga: 'CARGA-000657', destino: 'Mijas', fecha_entrega: '2026-10-20', horario: '8:00', estado: 'CERRADA', cargador: 'Ana', reabierta_en: null,
+  fecha_creacion: '2026-10-19T07:46:08.802+00:00', cerrada_por: 'rafael.perez3@ext.leroymerlin.es', fecha_cierre: '2026-10-19T08:23:50.665+00:00', email_enviado: 'SI'
+}, extra);
 
-// Una «base» mínima: palets y cargas por tabla; las lecturas quedan registradas.
-function entorno(palets, cargas, solicitantes) {
+// Una «base» mínima: palets y cargas por tabla; las lecturas quedan registradas. `opciones.pedidos` = batea_id de las
+// etiquetas (pedidos cliente) que lleva cada carga, una por fila; `opciones.fallaConteo` = el conteo de lo que lleva
+// cada carga falla.
+function entorno(palets, cargas, solicitantes, opciones) {
+  opciones = opciones || {};
   const lecturas = [];
   const llamadasKairos = [];
+  const avisos = [];
+  const idsDe = (filtro, columna) => decodeURIComponent((new RegExp(columna + '=in\\.\\(([^)]*)\\)').exec(filtro) || [, ''])[1]).split(',');
   const ctx = contexto({
     supaGet_: (tabla, filtro, columnas) => {
       lecturas.push([tabla, filtro, columnas]);
-      if (tabla === 'palets') return palets;
+      if (tabla === 'etiquetas' && opciones.fallaConteoPedidos) throw new Error('HTTP 503');
+      if (tabla === 'palets') {
+        if (/^batea_id=in\./.test(filtro)) { // conteo de lo que lleva cada carga
+          if (opciones.fallaConteo) throw new Error('HTTP 500');
+          const ids = idsDe(filtro, 'batea_id');
+          return palets.filter((p) => ids.indexOf(p.batea_id) !== -1).map((p) => ({ batea_id: p.batea_id }));
+        }
+        return palets;
+      }
+      if (tabla === 'etiquetas') {
+        const ids = idsDe(filtro, 'batea_id');
+        return (opciones.pedidos || []).filter((b) => ids.indexOf(b) !== -1).map((b) => ({ batea_id: b }));
+      }
       if (tabla === 'cargas') {
-        const ids = decodeURIComponent((/id_carga=in\.\(([^)]*)\)/.exec(filtro) || [, ''])[1]).split(',');
+        const ids = idsDe(filtro, 'id_carga');
         return cargas.filter((c) => ids.indexOf(c.id_carga) !== -1);
       }
       throw new Error('tabla no esperada: ' + tabla);
     },
-    _solicitantesPorSscc_: (destino, lista) => { llamadasKairos.push([destino, lista]); return (solicitantes && solicitantes(destino, lista)) || {}; }
+    _solicitantesPorSscc_: (destino, lista) => { llamadasKairos.push([destino, lista]); return (solicitantes && solicitantes(destino, lista)) || {}; },
+    Logger: { log: (m) => avisos.push(m) }
   });
-  return { ctx, lecturas, llamadasKairos };
+  return { ctx, lecturas, llamadasKairos, avisos };
 }
 
 // ── funciones puras ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -127,13 +148,16 @@ test('buscarRefill: cada resultado trae su carga, su estado y el cotejo con el i
     carga({ id_carga: 'CARGA-000654', destino: 'Marbella', fecha_entrega: '2020-01-01', horario: '13:00', cargador: null }),
     carga({ id_carga: 'CARGA-000700', estado: 'ABIERTA', destino: 'Mijas', reabierta_en: '2026-10-19T09:00:00Z' })
   ];
-  const { ctx } = entorno(palets, cargas);
+  const { ctx } = entorno(palets, cargas, null, { pedidos: ['CARGA-000657', 'CARGA-000657', 'CARGA-000654'] });
   const r = plano(ctx.buscarRefill({ codigoLm: '92186704' }));
   assert.strictEqual(r.hayMas, false);
   assert.strictEqual(r.resultados.length, 3);
   assert.deepStrictEqual(r.resultados[0], {
     sscc: '184000227900300003', codigoLm: '92186704', seccion: 'JARDIN', cotejo: 'COINCIDE', escaneadoEn: '2026-10-19T07:46:12.911+00:00',
-    idCarga: 'CARGA-000657', destino: 'Mijas', fechaEntrega: '2999-01-01', horario: '8:00', estado: 'ENVIADO',
+    idCarga: 'CARGA-000657', destino: 'Mijas', fechaEntrega: '2999-01-01', horario: '8:00',
+    llegadaEn: '2999-01-01T07:00:00.000Z', // las 8:00 de Madrid en enero (UTC+1)
+    cargaEmpezadaEn: '2026-10-19T07:46:08.802+00:00', cerradaEn: '2026-10-19T08:23:50.665+00:00', cerradaPor: 'rafael.perez3', informe: 'ENVIADO',
+    lleva: { palets: 1, pedidos: 2 }, estado: 'ENVIADO',
     estadoTexto: 'Enviado (carga cerrada, el camión aún no ha llegado)', cargador: 'Ana', solicitadoPor: null
   });
   assert.deepStrictEqual([r.resultados[1].cotejo, r.resultados[1].estado, r.resultados[1].destino, r.resultados[1].cargador], ['NO_ENCONTRADO', 'ENTREGADO', 'Marbella', '']);
@@ -181,7 +205,7 @@ test('buscarRefill: las cargas se piden una vez por carga distinta, en trozos de
   assert.strictEqual(deCargas.length, 2);
   const ids = (l) => /id_carga=in\.\(([^)]*)\)/.exec(l[1])[1].split(',').length;
   assert.deepStrictEqual(deCargas.map(ids), [40, 10]);
-  assert.strictEqual(deCargas[0][2], 'id_carga,destino,fecha_entrega,horario,estado,cargador,reabierta_en');
+  assert.strictEqual(deCargas[0][2], 'id_carga,destino,fecha_entrega,horario,estado,cargador,reabierta_en,fecha_creacion,cerrada_por,fecha_cierre,email_enviado');
   const repetidos = entorno([palet({ id: 1 }), palet({ id: 2, sscc: '184000227900304412' })], [carga()]);
   repetidos.ctx.buscarRefill({ sscc: '3044' });
   assert.strictEqual(repetidos.lecturas.filter((l) => l[0] === 'cargas').length, 1);
@@ -206,6 +230,76 @@ test('buscarRefill: «Solicitado por» de Kairos, pedido por destino con los SSC
   const r = plano(ctx.buscarRefill({ codigoLm: '92186704' }));
   assert.deepStrictEqual(plano(llamadasKairos), [['Mijas', ['184000227900300001', '184000227900300003']], ['Marbella', ['184000227900300002']]]);
   assert.deepStrictEqual(r.resultados.map((x) => x.solicitadoPor), [null, null, { ldap: 'jperez', motivo: 'Rotura' }]);
+});
+
+// ── el camión: cuándo se cargó y se cerró, cuándo llega y qué más lleva ──────────────────────────────────────────────
+test('informe de cierre: qué consta del correo según cargas.email_enviado', () => {
+  const { ctx } = entorno([], []);
+  [['SI', 'ENVIADO'], [' si ', 'ENVIADO'], ['NO', 'NO_ENVIADO'], ['MODO_PRUEBA (no enviado)', 'PRUEBA'], ['ERROR: Service invoked too many times', 'ERROR'], ['', ''], [null, ''], [undefined, ''], ['otra cosa', 'NO_ENVIADO']]
+    .forEach(([entrada, esperado]) => assert.strictEqual(ctx.estadoInformeCarga_(entrada), esperado, String(entrada)));
+});
+
+test('buscarRefill: carga cerrada = cuándo empezó, cuándo se cerró y quién (sin el dominio del correo) y el informe', () => {
+  const { ctx } = entorno([palet()], [carga()]);
+  const r = plano(ctx.buscarRefill({ sscc: '304411' })).resultados[0];
+  assert.deepStrictEqual([r.cargaEmpezadaEn, r.cerradaEn, r.cerradaPor, r.informe], ['2026-10-19T07:46:08.802+00:00', '2026-10-19T08:23:50.665+00:00', 'rafael.perez3', 'ENVIADO']);
+  const sinArroba = plano(entorno([palet()], [carga({ cerrada_por: 'Pedro' })]).ctx.buscarRefill({ sscc: '304411' })).resultados[0];
+  assert.strictEqual(sinArroba.cerradaPor, 'Pedro');
+  const sinNadie = plano(entorno([palet()], [carga({ cerrada_por: null, email_enviado: 'MODO_PRUEBA (no enviado)' })]).ctx.buscarRefill({ sscc: '304411' })).resultados[0];
+  assert.deepStrictEqual([sinNadie.cerradaPor, sinNadie.informe], ['', 'PRUEBA']);
+});
+
+test('buscarRefill: una carga ABIERTA no enseña cierre ni quién (aunque la base conserve datos de un cierre anterior)', () => {
+  const { ctx } = entorno([palet()], [carga({ estado: 'ABIERTA', email_enviado: null })]);
+  const r = plano(ctx.buscarRefill({ sscc: '304411' })).resultados[0];
+  assert.deepStrictEqual([r.estado, r.cerradaEn, r.cerradaPor, r.informe, r.cargaEmpezadaEn], ['EN_CARGA', '', '', '', '2026-10-19T07:46:08.802+00:00']);
+  const reabierta = plano(entorno([palet()], [carga({ estado: 'ABIERTA', reabierta_en: '2026-10-19T12:00:00Z' })]).ctx.buscarRefill({ sscc: '304411' })).resultados[0];
+  assert.deepStrictEqual([reabierta.cerradaEn, reabierta.cerradaPor], ['', '']); // sigue abierta: el cierre de antes ya no vale
+});
+
+test('buscarRefill: la llegada a destino sale como instante UTC calculado en hora de Madrid (verano e invierno)', () => {
+  const de = (fecha, horario) => plano(entorno([palet()], [carga({ fecha_entrega: fecha, horario })]).ctx.buscarRefill({ sscc: '304411' })).resultados[0].llegadaEn;
+  assert.strictEqual(de('2026-10-20', '8:00'), '2026-10-20T06:00:00.000Z'); // verano: UTC+2
+  assert.strictEqual(de('2026-11-20', '8:00'), '2026-11-20T07:00:00.000Z'); // invierno: UTC+1
+  assert.strictEqual(de('2026-10-20', '17:30'), '2026-10-20T15:30:00.000Z');
+  assert.strictEqual(de('2026-10-20', 'Envío único diario'), '2026-10-20T21:59:00.000Z'); // sin hora: hasta el final del día
+  assert.strictEqual(de('sin fecha', '8:00'), '');
+});
+
+test('buscarRefill: «lleva» cuenta los palets refill y los pedidos cliente de cada camión, con UNA lectura ligera por tabla', () => {
+  const palets = [palet({ id: 1, batea_id: 'CARGA-000657' }), palet({ id: 2, sscc: '184000227900304412', batea_id: 'CARGA-000657' }), palet({ id: 3, sscc: '184000227900304413', batea_id: 'CARGA-000654' })];
+  const cargas = [carga(), carga({ id_carga: 'CARGA-000654', destino: 'Marbella' })];
+  const { ctx, lecturas } = entorno(palets, cargas, null, { pedidos: ['CARGA-000657', 'CARGA-000657', 'CARGA-000657', 'CARGA-000999'] });
+  const r = plano(ctx.buscarRefill({ sscc: '3044' })).resultados;
+  assert.deepStrictEqual(r.map((x) => x.lleva), [{ palets: 2, pedidos: 3 }, { palets: 2, pedidos: 3 }, { palets: 1, pedidos: 0 }]);
+  const conteos = lecturas.filter((l) => (l[0] === 'palets' || l[0] === 'etiquetas') && l[2] === 'batea_id');
+  assert.deepStrictEqual(conteos, [['palets', 'batea_id=in.(CARGA-000657,CARGA-000654)', 'batea_id'], ['etiquetas', 'batea_id=in.(CARGA-000657,CARGA-000654)', 'batea_id']]);
+});
+
+test('buscarRefill: sin palets no se cuenta nada; un palet sin carga no lleva «lleva»', () => {
+  const vacio = entorno([], []);
+  vacio.ctx.buscarRefill({ sscc: '304411' });
+  assert.strictEqual(vacio.lecturas.filter((l) => l[2] === 'batea_id').length, 0);
+  const huerfano = plano(entorno([palet({ batea_id: 'CARGA-999999' })], [], null, { pedidos: ['CARGA-999999'] }).ctx.buscarRefill({ sscc: '304411' })).resultados[0];
+  assert.deepStrictEqual([huerfano.lleva, huerfano.llegadaEn, huerfano.cargaEmpezadaEn, huerfano.cerradaEn, huerfano.informe], [null, '', '', '', '']);
+});
+
+test('buscarRefill: si falla el conteo de lo que lleva cada camión, el resultado sale igual (sin «lleva») y queda un AVISO', () => {
+  const { ctx, avisos } = entorno([palet()], [carga()], null, { fallaConteo: true });
+  const r = plano(ctx.buscarRefill({ sscc: '304411' }));
+  assert.strictEqual(r.resultados.length, 1);
+  assert.strictEqual(r.resultados[0].lleva, null);
+  assert.strictEqual(r.resultados[0].estado, 'ENVIADO'); // el resto del dato sigue ahí
+  assert.strictEqual(avisos.length, 1);
+  assert.match(avisos[0], /AVISO buscarRefill.*HTTP 500/);
+});
+
+test('buscarRefill: si el conteo falla a medias (palets bien, pedidos mal) tampoco se enseña un «lleva» a medias', () => {
+  const { ctx, avisos } = entorno([palet()], [carga()], null, { fallaConteoPedidos: true });
+  const r = plano(ctx.buscarRefill({ sscc: '304411' }));
+  assert.strictEqual(r.resultados.length, 1);
+  assert.strictEqual(r.resultados[0].lleva, null);
+  assert.match(avisos[0], /HTTP 503/);
 });
 
 test('buscarRefill: solo lee (ninguna escritura ni función de carga)', () => {

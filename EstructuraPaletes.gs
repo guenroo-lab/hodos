@@ -99,7 +99,7 @@ function leerPaletesPorTiendaFecha_(destino, fecha) {
 var MAX_RESULTADOS_REFILL_ = 50;
 var MIN_CARACTERES_REFILL_ = 4;
 var COLUMNAS_PALET_REFILL_ = 'id,sscc,codigo_lm,seccion,encontrado,batea_id,fecha_creacion';
-var COLUMNAS_CARGA_REFILL_ = 'id_carga,destino,fecha_entrega,horario,estado,cargador,reabierta_en';
+var COLUMNAS_CARGA_REFILL_ = 'id_carga,destino,fecha_entrega,horario,estado,cargador,reabierta_en,fecha_creacion,cerrada_por,fecha_cierre,email_enviado';
 
 function buscarRefill(filtros) {
   filtros = filtros || {};
@@ -126,6 +126,19 @@ function buscarRefill(filtros) {
     leerCargas_('id_carga=in.(' + trozo.map(function (id) { return encodeURIComponent(id); }).join(',') + ')', COLUMNAS_CARGA_REFILL_).forEach(function (c) { cargas[c.idCarga] = c; });
   }
 
+  // Qué más va en cada camión: nº de palets refill y de pedidos cliente (solo cuentan filas de la columna batea_id).
+  // Es un añadido: si falla, el resultado sale igual sin ese dato y queda un AVISO en el registro de ejecuciones.
+  var contPalets = null, contPedidos = null;
+  if (idsCarga.length) {
+    try {
+      contPalets = contarPorCarga_('palets', idsCarga);
+      contPedidos = contarPorCarga_('etiquetas', idsCarga);
+    } catch (e) {
+      contPalets = contPedidos = null;
+      Logger.log('AVISO buscarRefill: no se pudo contar lo que lleva cada carga: ' + e.message);
+    }
+  }
+
   // «Solicitado por» de Kairos, igual que en el informe de cierre (si Kairos no lo tiene, queda vacío).
   var porDestino = {};
   palets.forEach(function (p) {
@@ -145,6 +158,7 @@ function buscarRefill(filtros) {
       var c = cargas[p.bateaId] || null;
       var estado = estadoRefill_(c, ahora);
       var sol = c ? solicitantes[c.destino + '|' + p.sscc] : null;
+      var llegadaMs = c ? fechaLlegadaCarga_(c.fechaEntrega, c.horario) : null;
       return {
         sscc: p.sscc,
         codigoLm: p.codigoLm || '',
@@ -155,6 +169,12 @@ function buscarRefill(filtros) {
         destino: c ? c.destino : '',
         fechaEntrega: c ? fechaComoTexto(c.fechaEntrega) : '',
         horario: c ? (c.horario || '') : '',
+        llegadaEn: llegadaMs == null ? '' : new Date(llegadaMs).toISOString(), // instante UTC de la llegada prevista
+        cargaEmpezadaEn: c ? fechaComoTexto(c.fechaCreacion) : '',
+        cerradaEn: c && c.estado === 'CERRADA' ? fechaComoTexto(c.fechaCierre) : '',
+        cerradaPor: c && c.estado === 'CERRADA' && c.cerradaPor ? String(c.cerradaPor).split('@')[0] : '',
+        informe: c ? estadoInformeCarga_(c.emailEnviado) : '',
+        lleva: c && contPalets ? { palets: contPalets[c.idCarga] || 0, pedidos: contPedidos[c.idCarga] || 0 } : null,
         estado: estado.codigo,
         estadoTexto: estado.texto,
         cargador: c && c.cargador ? c.cargador : '',

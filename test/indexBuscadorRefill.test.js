@@ -40,11 +40,15 @@ function pantalla(respuestaServidor) {
   return ctx;
 }
 
+const LLEGADA = '2026-10-20T06:00:00.000Z'; // las 8:00 de Madrid del 20/10
 const refill = (extra) => Object.assign({
   sscc: '00184000227900304411', codigoLm: '92186704', seccion: 'JARDIN', cotejo: 'COINCIDE', escaneadoEn: '2026-10-19T07:46:12.911+00:00',
-  idCarga: 'CARGA-000657', destino: 'Mijas', fechaEntrega: '2026-10-20', horario: '8:00', estado: 'ENVIADO',
+  idCarga: 'CARGA-000657', destino: 'Mijas', fechaEntrega: '2026-10-20', horario: '8:00', llegadaEn: LLEGADA,
+  cargaEmpezadaEn: '2026-10-19T07:46:08.802+00:00', cerradaEn: '2026-10-19T08:23:50.665+00:00', cerradaPor: 'rafael.perez3', informe: 'ENVIADO',
+  lleva: { palets: 19, pedidos: 6 }, estado: 'ENVIADO',
   estadoTexto: 'Enviado (carga cerrada, el camión aún no ha llegado)', cargador: '', solicitadoPor: null
 }, extra);
+const AHORA = Date.parse(LLEGADA) - 22 * 3600000; // 22 horas antes de la llegada
 
 // ── la pestaña está colocada y cableada ────────────────────────────────────────────────────────────────────────
 test('la pestaña «Buscar refill» está en la barra, con su vista, y cambiarPestana la enseña/oculta', () => {
@@ -72,17 +76,81 @@ test('es solo consulta: el bloque del buscador únicamente llama a buscarRefill 
 // ── tarjetas ────────────────────────────────────────────────────────────────────────────────────────────────────
 test('cada resultado enseña su estado a la vista, el SSCC y los datos de su carga', () => {
   const ctx = pantalla();
-  const h = ctx.htmlResultadosRefill_({ hayMas: false, resultados: [refill()] });
+  const h = ctx.htmlResultadosRefill_({ hayMas: false, resultados: [refill()] }, AHORA);
   assert.match(h, /<span class="refill-badge refill-badge-ENVIADO">Enviado<\/span><span class="valor-sscc">00184000227900304411<\/span>/);
   assert.match(h, /<div class="refill-estado-texto">Enviado \(carga cerrada, el camión aún no ha llegado\)<\/div>/);
   assert.match(h, /<dt>Código LM<\/dt><dd>92186704<\/dd>/);
   assert.match(h, /<dt>Sección<\/dt><dd>JARDIN<\/dd>/);
-  assert.match(h, /<dt>Carga<\/dt><dd>CARGA-000657 · Mijas<\/dd>/);
-  assert.match(h, /<dt>Llegada prevista<\/dt><dd>20\/10\/2026 8:00<\/dd>/);
   assert.match(h, /<dt>Escaneado<\/dt><dd>\d{2}\/\d{2} \d{2}:\d{2}<\/dd>/);
   assert.match(h, /<dt>Inventario<\/dt><dd>Coincide con el inventario<\/dd>/);
   assert.match(h, /<span class="tabla-contador">1<\/span>/);
   assert.doesNotMatch(h, /Cargador|Solicitado por|refill-aviso-mas/);
+});
+
+test('cada tarjeta tiene dos bloques, «Palet» y «Camión», y en el camión salen la carga, el cierre, la llegada y lo que lleva', () => {
+  const ctx = pantalla();
+  const h = ctx.htmlResultadosRefill_({ resultados: [refill({ cargador: 'Sergio Sánchez' })] }, AHORA);
+  assert.match(h, /<div class="refill-seccion">Palet<\/div><dl class="refill-datos">.*<\/dl><div class="refill-seccion">Camión<\/div><dl class="refill-datos">/);
+  const camion = h.split('<div class="refill-seccion">Camión</div>')[1];
+  assert.match(camion, /<dt>Camión \(carga\)<\/dt><dd>CARGA-000657 · Mijas<\/dd>/);
+  assert.match(camion, /<dt>Empezó a cargarse<\/dt><dd>\d{2}\/\d{2} \d{2}:\d{2}<\/dd>/);
+  assert.match(camion, /<dt>Cargado y cerrado<\/dt><dd>\d{2}\/\d{2} \d{2}:\d{2} · rafael\.perez3<\/dd>/);
+  assert.match(camion, /<dt>Informe a la tienda<\/dt><dd>Enviado a la tienda<\/dd>/);
+  assert.match(camion, /<dt>Llega a destino<\/dt><dd>Mijas · 20\/10\/2026 8:00<span class="refill-relativo">llega en 22 h<\/span><\/dd>/);
+  assert.match(camion, /<dt>Lleva<\/dt><dd>19 palets refill · 6 pedidos cliente<\/dd>/);
+  assert.match(camion, /<dt>Cargador<\/dt><dd>Sergio Sánchez<\/dd>/);
+  // y nada del palet se cuela en el bloque del camión (ni al revés)
+  assert.doesNotMatch(camion, /Código LM|Sección|Inventario|Escaneado/);
+  assert.doesNotMatch(h.split('<div class="refill-seccion">Camión</div>')[0], /Llega a destino|Lleva|Cargador/);
+});
+
+test('cuánto falta o cuánto hace de la llegada: minutos, horas y días; ahora; sin fecha válida no se dice nada', () => {
+  const ctx = pantalla();
+  const t = Date.parse(LLEGADA);
+  const dicho = (ahora, llegadaEn) => ctx.textoRelativoLlegadaRefill_(llegadaEn === undefined ? LLEGADA : llegadaEn, ahora);
+  assert.strictEqual(dicho(t - 35 * 60000), 'llega en 35 min');
+  assert.strictEqual(dicho(t - 3 * 60000), 'llega en 3 min'); // pocos minutos no es «ahora»
+  assert.strictEqual(dicho(t + 2 * 60000), 'llegó hace 2 min');
+  assert.strictEqual(dicho(t - 60000), 'llega en 1 min'); // justo el minuto: ya no es «ahora»
+  assert.strictEqual(dicho(t - 75 * 60000), 'llega en 1 h'); // pasada la hora se habla en horas
+  assert.strictEqual(dicho(t - 59 * 60000), 'llega en 59 min');
+  assert.strictEqual(dicho(t - 22.5 * 3600000), 'llega en 23 h'); // las horas se redondean, no se cortan
+  assert.strictEqual(dicho(t - 22.4 * 3600000), 'llega en 22 h');
+  assert.strictEqual(dicho(t - 22 * 3600000), 'llega en 22 h');
+  assert.strictEqual(dicho(t - 47 * 3600000), 'llega en 47 h');
+  assert.strictEqual(dicho(t - 3 * 86400000), 'llega en 3 días');
+  assert.strictEqual(dicho(t + 3 * 3600000), 'llegó hace 3 h');
+  assert.strictEqual(dicho(t + 10 * 60000), 'llegó hace 10 min');
+  assert.strictEqual(dicho(t + 5 * 86400000), 'llegó hace 5 días');
+  assert.strictEqual(dicho(t - 30000), 'llega ahora');
+  assert.strictEqual(dicho(t + 30000), 'llega ahora');
+  assert.strictEqual(dicho(t, ''), '');
+  assert.strictEqual(dicho(t, 'no es una fecha'), '');
+  assert.strictEqual(dicho(t, null), '');
+});
+
+test('el camión según el estado: abierta = «Aún no», informe de prueba o fallido, y singular/plural de lo que lleva', () => {
+  const ctx = pantalla();
+  const camion = (extra) => ctx.htmlResultadosRefill_({ resultados: [refill(extra)] }, AHORA).split('<div class="refill-seccion">Camión</div>')[1];
+  const abierta = camion({ estado: 'EN_CARGA', cerradaEn: '', cerradaPor: '', informe: '' });
+  assert.match(abierta, /<dt>Cargado y cerrado<\/dt><dd>Aún no: la carga sigue abierta<\/dd>/);
+  assert.doesNotMatch(abierta, /Informe a la tienda/);
+  assert.match(camion({ informe: 'PRUEBA' }), /<dd>Modo prueba \(no se envió\)<\/dd>/);
+  assert.match(camion({ informe: 'ERROR' }), /<dd>Falló el envío<\/dd>/);
+  assert.match(camion({ informe: 'NO_ENVIADO' }), /<dd>No enviado<\/dd>/);
+  assert.doesNotMatch(camion({ informe: 'RARO' }), /Informe a la tienda/); // un valor que no conocemos no se inventa
+  assert.match(camion({ lleva: { palets: 1, pedidos: 1 } }), /<dd>1 palet refill · 1 pedido cliente<\/dd>/);
+  assert.match(camion({ lleva: { palets: 0, pedidos: 0 } }), /<dd>0 palets refill · 0 pedidos cliente<\/dd>/);
+  assert.doesNotMatch(camion({ lleva: null }), /Lleva/); // el conteo es un añadido: si no llegó, no se enseña
+  assert.doesNotMatch(camion({ cerradaPor: '' }), /rafael/);
+  assert.match(camion({ cerradaPor: '' }), /<dt>Cargado y cerrado<\/dt><dd>\d{2}\/\d{2} \d{2}:\d{2}<\/dd>/);
+});
+
+test('ya llegó: la llegada dice hace cuánto (reloj de este equipo)', () => {
+  const ctx = pantalla();
+  const h = ctx.htmlResultadosRefill_({ resultados: [refill({ estado: 'ENTREGADO' })] }, Date.parse(LLEGADA) + 3 * 3600000);
+  assert.match(h, /<span class="refill-relativo">llegó hace 3 h<\/span>/);
+  assert.match(h, /refill-badge-ENTREGADO">Entregado</);
 });
 
 test('los cuatro estados tienen su color y su etiqueta; uno desconocido se trata como «Sin carga»', () => {
@@ -116,18 +184,29 @@ test('cargador y «Solicitado por» salen solo si los hay', () => {
   assert.doesNotMatch(vacio, /Solicitado por/);
 });
 
-test('lo que falta se ve como «—» (código LM, sección, carga, llegada, escaneo)', () => {
+test('lo que falta se ve como «—» (código LM, sección, escaneo, camión) y sin carga no salen filas inventadas del camión', () => {
   const ctx = pantalla();
-  const h = ctx.htmlResultadosRefill_({ resultados: [refill({ codigoLm: '', seccion: '', idCarga: '', destino: '', fechaEntrega: '', horario: '', escaneadoEn: '', estado: 'SIN_CARGA', estadoTexto: 'Sin carga asociada' })] });
-  ['Código LM', 'Sección', 'Carga', 'Llegada prevista', 'Escaneado'].forEach((t) => assert.match(h, new RegExp('<dt>' + t + '</dt><dd>—</dd>')));
+  const h = ctx.htmlResultadosRefill_({ resultados: [refill({ codigoLm: '', seccion: '', idCarga: '', destino: '', fechaEntrega: '', horario: '', escaneadoEn: '', llegadaEn: '', cargaEmpezadaEn: '', cerradaEn: '', cerradaPor: '', informe: '', lleva: null, estado: 'SIN_CARGA', estadoTexto: 'Sin carga asociada' })] }, AHORA);
+  ['Código LM', 'Sección', 'Escaneado', 'Camión \\(carga\\)'].forEach((t) => assert.match(h, new RegExp('<dt>' + t + '</dt><dd>—</dd>')));
+  assert.doesNotMatch(h, /Empezó a cargarse|Cargado y cerrado|Informe a la tienda|Llega a destino|Lleva|refill-relativo/);
+});
+
+test('con la carga pero sin fecha de llegada válida: «Llega a destino» en «—», sin frase de cuánto falta', () => {
+  const ctx = pantalla();
+  const h = ctx.htmlResultadosRefill_({ resultados: [refill({ fechaEntrega: '', horario: '', llegadaEn: '' })] }, AHORA);
+  assert.match(h, /<dt>Llega a destino<\/dt><dd>—<\/dd>/);
+  assert.doesNotMatch(h, /refill-relativo/);
+  const sinHora = ctx.htmlResultadosRefill_({ resultados: [refill({ horario: '', llegadaEn: '' })] }, AHORA);
+  assert.match(sinHora, /<dd>Mijas · 20\/10\/2026<\/dd>/);
 });
 
 test('todo lo que viene de la base se escapa (SSCC, códigos, carga, tienda, cargador, solicitante, motivo, estado)', () => {
   const ctx = pantalla();
   const malo = '<img src=x onerror=alert(1)>';
-  const h = ctx.htmlResultadosRefill_({ resultados: [refill({ sscc: malo, codigoLm: malo, seccion: malo, idCarga: malo, destino: malo, horario: malo, cargador: malo, estadoTexto: malo, solicitadoPor: { ldap: malo, motivo: malo } })] });
+  const h = ctx.htmlResultadosRefill_({ resultados: [refill({ sscc: malo, codigoLm: malo, seccion: malo, idCarga: malo, destino: malo, horario: malo, cargador: malo, cerradaPor: malo, estadoTexto: malo, solicitadoPor: { ldap: malo, motivo: malo } })] }, AHORA);
   assert.doesNotMatch(h, /<img/);
-  assert.ok((h.match(/&lt;img src=x onerror=alert\(1\)&gt;/g) || []).length >= 8);
+  // sscc, código, sección, carga, tienda (en «Camión» y en «Llega»), horario, cargador, quien cerró, estado, solicitante y motivo
+  assert.ok((h.match(/&lt;img src=x onerror=alert\(1\)&gt;/g) || []).length >= 12);
 });
 
 test('sin resultados lo dice; con «hayMas» avisa y marca el contador con +', () => {

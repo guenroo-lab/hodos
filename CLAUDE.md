@@ -416,8 +416,14 @@ implementadas: Módulo 1 (carga por lote + etiquetas), Cabecera+Buscadores, Fase
   cerrada y pasada la hora de llegada = «Entregado» (misma regla que `fechaLlegadaCarga_`); sin carga = «Sin carga». Además:
   cotejo con el inventario (coincide / no encontrado / sin cotejar), llegada prevista, cargador y «Solicitado por» de Kairos
   (`_solicitantesPorSscc_`, vacío mientras Kairos tenga el refill apagado). Al abrir la pestaña solo se pone el cursor en el SSCC
-  (no busca nada: no dispara la carga de etiquetas de «Buscar»); Intro busca (la pistola lo manda). Pruebas:
-  `test/buscadorRefill.test.js` (servidor) y `test/indexBuscadorRefill.test.js` (pantalla); unas 78 mutaciones detectadas.
+  (no busca nada: no dispara la carga de etiquetas de «Buscar»); Intro busca (la pistola lo manda). Cada tarjeta lleva dos
+  bloques: «Palet» (código LM, sección, escaneado, inventario, solicitado por) y «Camión» (la carga: cuándo empezó a cargarse,
+  cuándo se cerró y quién, si el informe salió a la tienda —`estadoInformeCarga_` sobre `cargas.email_enviado`: SI / NO /
+  MODO_PRUEBA / ERROR—, a qué tienda y cuándo llega con «llega en 22 h» / «llegó hace 3 h» según el reloj de ese equipo, qué más
+  lleva —nº de palets refill y de pedidos cliente, `contarPorCarga_`, un añadido que si falla no tumba la búsqueda— y el cargador).
+  HODOS NO guarda matrícula, transportista ni hora real de llegada: el «camión» es la carga (tienda + fecha + horario) y la
+  llegada es la prevista. Pruebas: `test/buscadorRefill.test.js` (servidor) y `test/indexBuscadorRefill.test.js` (pantalla);
+  unas 127 mutaciones detectadas.
 - **Sin diálogos nativos del navegador (regla del usuario, 2026-10-15).** `Index.html` no usa `alert()`,
   `confirm()` ni `prompt()` (salen con la URL fea de googleusercontent.com): avisos con
   `mostrarModalAviso_(titulo, texto)` y confirmaciones con
