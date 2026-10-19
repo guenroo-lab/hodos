@@ -494,6 +494,10 @@
     .refill-datos dd { margin:2px 0 0; font-size:13.5px; font-weight:600; word-break:break-word; }
     .refill-datos dd.refill-no-coincide { color:var(--color-error); }
     .refill-aviso-mas { font-size:12.5px; opacity:0.8; text-align:center; padding:6px 0 14px; }
+    /* Vista de una tienda: el interruptor «Pedidos / Refill SIE». */
+    .tienda-modos { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+    .tienda-modos button { background:var(--bg-primary); color:var(--text-primary); border:1px solid var(--input-border); border-radius:999px; padding:9px 20px; font-size:13px; font-weight:700; min-height:40px; }
+    .tienda-modos button[aria-pressed="true"] { background:var(--color-accent); color:var(--on-accent); border-color:var(--color-accent); }
     /* El SSCC (18-20 cifras) necesita más ancho que el resto de campos; en móvil (≤700px) manda el 1fr de .busqueda-form. */
     @media (min-width:701px) { .busqueda-form.refill-form { grid-template-columns:minmax(250px, 2fr) minmax(150px, 1fr) auto auto; } }
     .fila-soporte-sub {
@@ -1117,16 +1121,36 @@
     <!-- ══════════ VISTA: BUSCADOR TIENDA ══════════ -->
     <div id="vistaTienda" class="vista-oculta">
       <h2 id="tituloTienda" style="margin-bottom:16px; color:var(--color-accent-text);"></h2>
-      <div class="busqueda-form">
-        <div class="form-group"><label>Fecha</label><input type="date" id="tiendaFecha"></div>
-        <div class="form-group"><label>ID único</label><input type="text" id="tiendaIdUnico" placeholder="HODOS-000123"></div>
-        <div class="form-group"><label>Nº Pedido</label><input type="text" id="tiendaNumeroPedido"></div>
-        <button onclick="buscarYMostrar('tienda')">
-          <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          Buscar
-        </button>
+      <div class="tienda-modos">
+        <button type="button" id="btnTiendaPedidos" aria-pressed="true" onclick="cambiarModoTienda_('pedidos')">Pedidos</button>
+        <button type="button" id="btnTiendaRefill" aria-pressed="false" onclick="cambiarModoTienda_('refill')">Refill SIE</button>
       </div>
-      <div class="resultados-wrap"><div id="resultadosTienda"></div></div>
+      <div id="tiendaModoPedidos">
+        <div class="busqueda-form">
+          <div class="form-group"><label>Fecha</label><input type="date" id="tiendaFecha"></div>
+          <div class="form-group"><label>ID único</label><input type="text" id="tiendaIdUnico" placeholder="HODOS-000123"></div>
+          <div class="form-group"><label>Nº Pedido</label><input type="text" id="tiendaNumeroPedido"></div>
+          <button onclick="buscarYMostrar('tienda')">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Buscar
+          </button>
+        </div>
+        <div class="resultados-wrap"><div id="resultadosTienda"></div></div>
+      </div>
+      <div id="tiendaModoRefill" class="vista-oculta">
+        <p class="hint-texto">Busca un palet de refill (SIE) de tu tienda por su SSCC, por su código LM o por los dos. Solo consulta.</p>
+        <div class="busqueda-form refill-form">
+          <div class="form-group"><label for="tiendaRefillSscc">SSCC</label><input type="text" id="tiendaRefillSscc" inputmode="numeric" autocomplete="off" placeholder="00184000227900304411 (o solo el final)"></div>
+          <div class="form-group"><label for="tiendaRefillCodigoLm">Código LM</label><input type="text" id="tiendaRefillCodigoLm" inputmode="numeric" autocomplete="off" placeholder="92186704"></div>
+          <button type="button" onclick="buscarRefillUI_('tienda')">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Buscar refill
+          </button>
+          <button type="button" class="btn-secundario" onclick="limpiarRefillUI_('tienda')">Limpiar</button>
+        </div>
+        <div class="aviso-error" id="tiendaRefillAviso"></div>
+        <div id="resultadosTiendaRefill"></div>
+      </div>
     </div>
   </main>
 </div>
@@ -1527,7 +1551,7 @@
 
   // ══ BUSCADOR DE REFILL: inicio ══
   // Pestaña «Buscar refill»: palets SIE por SSCC y/o código LM. SOLO consulta: no reabre ni cambia ninguna carga.
-  var refillBusquedaN_ = 0; // la búsqueda más reciente gana si dos respuestas llegan cruzadas
+  var refillBusquedaN_ = { interno: 0, tienda: 0 }; // la búsqueda más reciente gana si dos respuestas llegan cruzadas
   var ETIQUETA_ESTADO_REFILL_ = { EN_CARGA: 'En carga', ENVIADO: 'Enviado', ENTREGADO: 'Entregado', SIN_CARGA: 'Sin carga' };
   var TEXTO_COTEJO_REFILL_ = { COINCIDE: 'Coincide con el inventario', NO_ENCONTRADO: 'No encontrado en inventario', SIN_COTEJAR: 'Sin cotejar todavía' };
 
@@ -1557,11 +1581,9 @@
     return dif > 0 ? 'llega en ' + duracionCortaRefill_(dif) : 'llegó hace ' + duracionCortaRefill_(dif);
   }
 
-  var TEXTO_INFORME_REFILL_ = { ENVIADO: 'Enviado a la tienda', PRUEBA: 'Modo prueba (no se envió)', ERROR: 'Falló el envío', NO_ENVIADO: 'No enviado' };
-
   // Dos bloques por palet: el PALET (qué es y si cuadra con el inventario) y el CAMIÓN en el que va (la carga: cuándo
-  // se cargó y se cerró, cuándo llega a su destino y qué más lleva). HODOS no guarda matrícula ni transportista: el
-  // «camión» es la carga (tienda + fecha + horario).
+  // empezó a cargarse y cuándo llega a su destino). HODOS no guarda matrícula ni transportista: el «camión» es la carga
+  // (tienda + fecha + horario).
   function htmlTarjetaRefill_(r, ahoraMs) {
     ahoraMs = ahoraMs == null ? Date.now() : ahoraMs;
     var estado = ETIQUETA_ESTADO_REFILL_[r.estado] ? r.estado : 'SIN_CARGA';
@@ -1575,14 +1597,10 @@
     var camion = htmlDatoRefill_('Camión (carga)', r.idCarga ? escapeHtml_(r.idCarga) + (r.destino ? ' · ' + escapeHtml_(r.destino) : '') : '—');
     if (r.idCarga && r.destino) {
       if (r.cargaEmpezadaEn) camion += htmlDatoRefill_('Empezó a cargarse', escapeHtml_(formatearFechaHora_(r.cargaEmpezadaEn)));
-      if (r.cerradaEn) camion += htmlDatoRefill_('Cargado y cerrado', escapeHtml_(formatearFechaHora_(r.cerradaEn)) + (r.cerradaPor ? ' · ' + escapeHtml_(r.cerradaPor) : ''));
-      else if (estado === 'EN_CARGA') camion += htmlDatoRefill_('Cargado y cerrado', 'Aún no: la carga sigue abierta');
-      if (r.informe && TEXTO_INFORME_REFILL_[r.informe]) camion += htmlDatoRefill_('Informe a la tienda', escapeHtml_(TEXTO_INFORME_REFILL_[r.informe]));
       var relativo = textoRelativoLlegadaRefill_(r.llegadaEn, ahoraMs);
       camion += htmlDatoRefill_('Llega a destino', r.fechaEntrega
         ? escapeHtml_(r.destino + ' · ' + fechaCortaRefill_(r.fechaEntrega) + (r.horario ? ' ' + r.horario : '')) + (relativo ? '<span class="refill-relativo">' + escapeHtml_(relativo) + '</span>' : '')
         : '—');
-      if (r.lleva) camion += htmlDatoRefill_('Lleva', escapeHtml_(r.lleva.palets + ' palet' + (r.lleva.palets === 1 ? '' : 's') + ' refill · ' + r.lleva.pedidos + ' pedido' + (r.lleva.pedidos === 1 ? '' : 's') + ' cliente'));
       if (r.cargador) camion += htmlDatoRefill_('Cargador', escapeHtml_(r.cargador));
     }
     return '<div class="refill-card refill-' + estado + '">'
@@ -1602,36 +1620,60 @@
       + (datos.hayMas ? '<p class="refill-aviso-mas">Hay más resultados de los que se muestran. Escribe más cifras para afinar la búsqueda.</p>' : '');
   }
 
-  function buscarRefillUI_() {
-    var sscc = document.getElementById('refillSscc').value.trim();
-    var codigoLm = document.getElementById('refillCodigoLm').value.trim();
-    var aviso = document.getElementById('refillAviso');
-    var cont = document.getElementById('resultadosRefill');
+  // El mismo buscador sirve a dos pantallas: la de administración (pestaña «Buscar refill», todas las tiendas) y la de
+  // una tienda (?vista=tienda&tienda=…, solo SUS refill: el servidor filtra por `destino`).
+  function idsRefill_(modo) {
+    return modo === 'tienda'
+      ? { sscc: 'tiendaRefillSscc', codigoLm: 'tiendaRefillCodigoLm', aviso: 'tiendaRefillAviso', resultados: 'resultadosTiendaRefill' }
+      : { sscc: 'refillSscc', codigoLm: 'refillCodigoLm', aviso: 'refillAviso', resultados: 'resultadosRefill' };
+  }
+
+  function buscarRefillUI_(modo) {
+    modo = modo === 'tienda' ? 'tienda' : 'interno';
+    var ids = idsRefill_(modo);
+    var sscc = document.getElementById(ids.sscc).value.trim();
+    var codigoLm = document.getElementById(ids.codigoLm).value.trim();
+    var aviso = document.getElementById(ids.aviso);
+    var cont = document.getElementById(ids.resultados);
     aviso.textContent = '';
     if (!sscc && !codigoLm) {
       cont.innerHTML = '';
       aviso.textContent = 'Escribe un SSCC o un código LM.';
       return;
     }
-    var n = ++refillBusquedaN_;
+    var filtros = { sscc: sscc, codigoLm: codigoLm };
+    if (modo === 'tienda') filtros.destino = TIENDA_FILTRO;
+    var n = ++refillBusquedaN_[modo];
     cont.innerHTML = '<p class="cargando-resultados">Buscando…</p>';
-    gas('buscarRefill', { sscc: sscc, codigoLm: codigoLm }).then(function (datos) {
-      if (n !== refillBusquedaN_) return;
+    gas('buscarRefill', filtros).then(function (datos) {
+      if (n !== refillBusquedaN_[modo]) return;
       cont.innerHTML = htmlResultadosRefill_(datos);
     }).catch(function (err) {
-      if (n !== refillBusquedaN_) return;
+      if (n !== refillBusquedaN_[modo]) return;
       cont.innerHTML = '';
       aviso.textContent = mensajeError_(err);
     });
   }
 
-  function limpiarRefillUI_() {
-    refillBusquedaN_++; // una respuesta que aún esté de camino ya no se pinta
-    document.getElementById('refillSscc').value = '';
-    document.getElementById('refillCodigoLm').value = '';
-    document.getElementById('refillAviso').textContent = '';
-    document.getElementById('resultadosRefill').innerHTML = '';
-    document.getElementById('refillSscc').focus();
+  function limpiarRefillUI_(modo) {
+    modo = modo === 'tienda' ? 'tienda' : 'interno';
+    var ids = idsRefill_(modo);
+    refillBusquedaN_[modo]++; // una respuesta que aún esté de camino ya no se pinta
+    document.getElementById(ids.sscc).value = '';
+    document.getElementById(ids.codigoLm).value = '';
+    document.getElementById(ids.aviso).textContent = '';
+    document.getElementById(ids.resultados).innerHTML = '';
+    document.getElementById(ids.sscc).focus();
+  }
+
+  // Vista de una tienda: dos modos, «Pedidos» (el buscador de siempre) y «Refill SIE». Cambiar de modo no busca nada.
+  function cambiarModoTienda_(modo) {
+    var refill = modo === 'refill';
+    document.getElementById('tiendaModoPedidos').classList.toggle('vista-oculta', refill);
+    document.getElementById('tiendaModoRefill').classList.toggle('vista-oculta', !refill);
+    document.getElementById('btnTiendaPedidos').setAttribute('aria-pressed', refill ? 'false' : 'true');
+    document.getElementById('btnTiendaRefill').setAttribute('aria-pressed', refill ? 'true' : 'false');
+    if (refill) document.getElementById('tiendaRefillSscc').focus();
   }
   // ══ BUSCADOR DE REFILL: fin ══
 
@@ -3722,7 +3764,8 @@
   });
 
   activarIntroComoAccion_('camionFecha', crearCargaUI);
-  ['refillSscc', 'refillCodigoLm'].forEach(function (id) { activarIntroComoAccion_(id, buscarRefillUI_); });
+  ['refillSscc', 'refillCodigoLm'].forEach(function (id) { activarIntroComoAccion_(id, function () { buscarRefillUI_(); }); });
+  ['tiendaRefillSscc', 'tiendaRefillCodigoLm'].forEach(function (id) { activarIntroComoAccion_(id, function () { buscarRefillUI_('tienda'); }); });
 
   iniciarVista();
 

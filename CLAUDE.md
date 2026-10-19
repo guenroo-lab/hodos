@@ -417,13 +417,19 @@ implementadas: Módulo 1 (carga por lote + etiquetas), Cabecera+Buscadores, Fase
   cotejo con el inventario (coincide / no encontrado / sin cotejar), llegada prevista, cargador y «Solicitado por» de Kairos
   (`_solicitantesPorSscc_`, vacío mientras Kairos tenga el refill apagado). Al abrir la pestaña solo se pone el cursor en el SSCC
   (no busca nada: no dispara la carga de etiquetas de «Buscar»); Intro busca (la pistola lo manda). Cada tarjeta lleva dos
-  bloques: «Palet» (código LM, sección, escaneado, inventario, solicitado por) y «Camión» (la carga: cuándo empezó a cargarse,
-  cuándo se cerró y quién, si el informe salió a la tienda —`estadoInformeCarga_` sobre `cargas.email_enviado`: SI / NO /
-  MODO_PRUEBA / ERROR—, a qué tienda y cuándo llega con «llega en 22 h» / «llegó hace 3 h» según el reloj de ese equipo, qué más
-  lleva —nº de palets refill y de pedidos cliente, `contarPorCarga_`, un añadido que si falla no tumba la búsqueda— y el cargador).
-  HODOS NO guarda matrícula, transportista ni hora real de llegada: el «camión» es la carga (tienda + fecha + horario) y la
-  llegada es la prevista. Pruebas: `test/buscadorRefill.test.js` (servidor) y `test/indexBuscadorRefill.test.js` (pantalla);
-  unas 127 mutaciones detectadas.
+  bloques: «Palet» (código LM, sección, escaneado, inventario, solicitado por) y «Camión» (la carga y su tienda, cuándo empezó a
+  cargarse, a qué tienda y cuándo llega con «llega en 22 h» / «llegó hace 3 h» según el reloj de ese equipo, y el cargador).
+  A petición de Pedro (19/10) NO se enseñan el cierre de la carga ni quién la cerró, el informe a la tienda ni «Lleva»
+  (nº de palets y pedidos del camión): no volver a añadirlos sin hablarlo. HODOS NO guarda matrícula, transportista ni hora
+  real de llegada: el «camión» es la carga (tienda + fecha + horario) y la llegada es la prevista.
+  **También en la vista de cada tienda** (`?vista=tienda&tienda=Marbella`, nombres exactos de `TIENDAS_VALIDAS`, «Málaga» con
+  tilde): interruptor «Pedidos / Refill SIE» (`cambiarModoTienda_`; el modo «Pedidos» es el buscador de siempre, intacto, y
+  abre por defecto). `buscarRefillUI_('tienda')` manda `destino: TIENDA_FILTRO` y el servidor filtra EN LA CONSULTA
+  (`select=…,cargas!inner(destino)&cargas.destino=eq.<tienda>`; `palets.batea_id` es FK de `cargas.id_carga`) para que el
+  límite de 50 cuente solo sus palets; una tienda que no es del circuito lanza «Tienda no válida.» y nunca cae a buscar en todas.
+  Las dos pantallas comparten `htmlResultadosRefill_` y tienen contadores propios («gana la búsqueda más reciente» por
+  separado). Pruebas: `test/buscadorRefill.test.js` (servidor) y `test/indexBuscadorRefill.test.js` (pantalla); 133 mutaciones
+  detectadas.
 - **Sin diálogos nativos del navegador (regla del usuario, 2026-10-15).** `Index.html` no usa `alert()`,
   `confirm()` ni `prompt()` (salen con la URL fea de googleusercontent.com): avisos con
   `mostrarModalAviso_(titulo, texto)` y confirmaciones con

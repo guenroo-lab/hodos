@@ -96,10 +96,11 @@ function leerPaletesPorTiendaFecha_(destino, fecha) {
 // ── Buscador de refill (2026-10-19): SOLO LECTURA ───────────────────────────────────────────────────────────
 // Busca palets SIE por SSCC y/o código LM («contiene», para poder teclear solo el final) y dice en qué punto está
 // cada uno según su carga. No abre ni cambia nada: es el camino para mirar un refill sin reabrir su carga.
+// `filtros` = { sscc, codigoLm, destino }: con `destino` (la vista de una tienda) solo salen los refill de esa tienda.
 var MAX_RESULTADOS_REFILL_ = 50;
 var MIN_CARACTERES_REFILL_ = 4;
 var COLUMNAS_PALET_REFILL_ = 'id,sscc,codigo_lm,seccion,encontrado,batea_id,fecha_creacion';
-var COLUMNAS_CARGA_REFILL_ = 'id_carga,destino,fecha_entrega,horario,estado,cargador,reabierta_en,fecha_creacion,cerrada_por,fecha_cierre,email_enviado';
+var COLUMNAS_CARGA_REFILL_ = 'id_carga,destino,fecha_entrega,horario,estado,cargador,reabierta_en,fecha_creacion';
 
 function buscarRefill(filtros) {
   filtros = filtros || {};
@@ -109,12 +110,19 @@ function buscarRefill(filtros) {
   if (sscc && sscc.length < MIN_CARACTERES_REFILL_) throw new Error('El SSCC necesita al menos ' + MIN_CARACTERES_REFILL_ + ' dígitos.');
   if (codigoLm && codigoLm.length < MIN_CARACTERES_REFILL_) throw new Error('El código LM necesita al menos ' + MIN_CARACTERES_REFILL_ + ' caracteres.');
 
+  // Desde la vista de una tienda se busca solo entre SUS refill: el filtro va en la consulta (palets.batea_id enlaza con
+  // cargas.id_carga), no después, para que el límite de 50 cuente solo los de esa tienda. Una tienda que no es del circuito
+  // es un error: nunca se cae a buscar en todas.
+  var destino = String(filtros.destino == null ? '' : filtros.destino).trim();
+  if (destino && validarTienda(destino) === '') throw new Error('Tienda no válida.');
+
   var partes = [];
   if (sscc) partes.push('sscc=ilike.' + encodeURIComponent('*' + sscc + '*'));
   if (codigoLm) partes.push('codigo_lm=ilike.' + encodeURIComponent('*' + codigoLm + '*'));
+  if (destino) partes.push('cargas.destino=eq.' + encodeURIComponent(destino));
   partes.push('order=fecha_creacion.desc,id.desc');
   partes.push('limit=' + (MAX_RESULTADOS_REFILL_ + 1)); // uno de más: así se sabe si hay más de los que se enseñan
-  var palets = supaGet_('palets', partes.join('&'), COLUMNAS_PALET_REFILL_).map(filaPaleteDesdeSupabase_);
+  var palets = supaGet_('palets', partes.join('&'), destino ? COLUMNAS_PALET_REFILL_ + ',cargas!inner(destino)' : COLUMNAS_PALET_REFILL_).map(filaPaleteDesdeSupabase_);
   var hayMas = palets.length > MAX_RESULTADOS_REFILL_;
   if (hayMas) palets = palets.slice(0, MAX_RESULTADOS_REFILL_);
 
@@ -124,19 +132,6 @@ function buscarRefill(filtros) {
   for (var i = 0; i < idsCarga.length; i += LOTE_IDS_CARGAS_) {
     var trozo = idsCarga.slice(i, i + LOTE_IDS_CARGAS_);
     leerCargas_('id_carga=in.(' + trozo.map(function (id) { return encodeURIComponent(id); }).join(',') + ')', COLUMNAS_CARGA_REFILL_).forEach(function (c) { cargas[c.idCarga] = c; });
-  }
-
-  // Qué más va en cada camión: nº de palets refill y de pedidos cliente (solo cuentan filas de la columna batea_id).
-  // Es un añadido: si falla, el resultado sale igual sin ese dato y queda un AVISO en el registro de ejecuciones.
-  var contPalets = null, contPedidos = null;
-  if (idsCarga.length) {
-    try {
-      contPalets = contarPorCarga_('palets', idsCarga);
-      contPedidos = contarPorCarga_('etiquetas', idsCarga);
-    } catch (e) {
-      contPalets = contPedidos = null;
-      Logger.log('AVISO buscarRefill: no se pudo contar lo que lleva cada carga: ' + e.message);
-    }
   }
 
   // «Solicitado por» de Kairos, igual que en el informe de cierre (si Kairos no lo tiene, queda vacío).
@@ -171,10 +166,6 @@ function buscarRefill(filtros) {
         horario: c ? (c.horario || '') : '',
         llegadaEn: llegadaMs == null ? '' : new Date(llegadaMs).toISOString(), // instante UTC de la llegada prevista
         cargaEmpezadaEn: c ? fechaComoTexto(c.fechaCreacion) : '',
-        cerradaEn: c && c.estado === 'CERRADA' ? fechaComoTexto(c.fechaCierre) : '',
-        cerradaPor: c && c.estado === 'CERRADA' && c.cerradaPor ? String(c.cerradaPor).split('@')[0] : '',
-        informe: c ? estadoInformeCarga_(c.emailEnviado) : '',
-        lleva: c && contPalets ? { palets: contPalets[c.idCarga] || 0, pedidos: contPedidos[c.idCarga] || 0 } : null,
         estado: estado.codigo,
         estadoTexto: estado.texto,
         cargador: c && c.cargador ? c.cargador : '',

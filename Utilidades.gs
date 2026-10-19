@@ -488,17 +488,6 @@ function estadoRefill_(carga, ahoraMs) {
   return { codigo: 'SIN_CARGA', texto: 'Carga ' + String(carga.estado || 'sin estado').toLowerCase() };
 }
 
-// Qué consta del correo del informe de cierre de una carga (cargas.email_enviado: «SI», «NO», «MODO_PRUEBA (no
-// enviado)» o «ERROR: …»; vacío mientras la carga está abierta).
-function estadoInformeCarga_(emailEnviado) {
-  var s = String(emailEnviado == null ? '' : emailEnviado).trim().toUpperCase();
-  if (!s) return '';
-  if (s === 'SI') return 'ENVIADO';
-  if (s.indexOf('MODO_PRUEBA') === 0) return 'PRUEBA';
-  if (s.indexOf('ERROR') === 0) return 'ERROR';
-  return 'NO_ENVIADO';
-}
-
 function textoLlegadaCarga_(carga) {
   var f = /^(\d{4})-(\d{2})-(\d{2})/.exec(String((carga && carga.fechaEntrega) || ''));
   var fecha = f ? f[3] + '/' + f[2] + '/' + f[1] : String((carga && carga.fechaEntrega) || '');
