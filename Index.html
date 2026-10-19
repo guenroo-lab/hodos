@@ -474,6 +474,26 @@
     .fila-soporte-info { display:flex; flex-direction:column; gap:2px; min-width:0; }
     .valor-id { font-weight:700; color:var(--color-accent-text); font-size:15px; }
     .valor-sscc { font-weight:700; color:#2f8fd6; font-size:15px; letter-spacing:0.3px; }
+
+    /* ── Buscar refill: una tarjeta por palet, con su estado a la vista (colores con contraste sobre blanco) ── */
+    .refill-card { background:var(--bg-primary); border:1px solid var(--input-border); border-left:5px solid #5b6475; border-radius:10px; padding:14px 16px; margin-bottom:12px; }
+    .refill-card.refill-EN_CARGA { border-left-color:#b45309; }
+    .refill-card.refill-ENVIADO { border-left-color:#1d6fb8; }
+    .refill-card.refill-ENTREGADO { border-left-color:#147638; }
+    .refill-cab { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .refill-badge { display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:0.5px; color:#fff; background:#5b6475; }
+    .refill-badge-EN_CARGA { background:#b45309; }
+    .refill-badge-ENVIADO { background:#1d6fb8; }
+    .refill-badge-ENTREGADO { background:#147638; }
+    .refill-estado-texto { font-size:12.5px; opacity:0.8; margin-top:6px; }
+    .refill-datos { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px 18px; margin:12px 0 0; }
+    .refill-datos > div { min-width:0; }
+    .refill-datos dt { font-size:10.5px; letter-spacing:0.5px; text-transform:uppercase; opacity:0.65; }
+    .refill-datos dd { margin:2px 0 0; font-size:13.5px; font-weight:600; word-break:break-word; }
+    .refill-datos dd.refill-no-coincide { color:var(--color-error); }
+    .refill-aviso-mas { font-size:12.5px; opacity:0.8; text-align:center; padding:6px 0 14px; }
+    /* El SSCC (18-20 cifras) necesita más ancho que el resto de campos; en móvil (≤700px) manda el 1fr de .busqueda-form. */
+    @media (min-width:701px) { .busqueda-form.refill-form { grid-template-columns:minmax(250px, 2fr) minmax(150px, 1fr) auto auto; } }
     .fila-soporte-sub {
       font-size:12px; opacity:0.7; overflow:hidden; text-overflow:ellipsis;
       white-space:nowrap; max-width:60vw;
@@ -615,6 +635,10 @@
     <button data-tab="interno" onclick="cambiarPestana('interno')">
       <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <span>Buscar</span>
+    </button>
+    <button data-tab="refill" onclick="cambiarPestana('refill')">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="14" width="18" height="4" rx="1"/><path d="M5 18v2M19 18v2"/><circle cx="12" cy="7" r="4"/><line x1="15" y1="10" x2="18" y2="13"/></svg>
+      <span>Buscar refill</span>
     </button>
     <button data-tab="pendientes" onclick="cambiarPestana('pendientes')">
       <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -816,6 +840,23 @@
         </button>
       </div>
       <div class="resultados-wrap"><div id="resultadosInterno"></div></div>
+    </div>
+
+    <!-- ══════════ VISTA: BUSCAR REFILL (palets SIE, solo consulta) ══════════ -->
+    <div id="vistaRefill" class="vista-oculta">
+      <h2 style="margin-bottom:6px;">Buscar refill</h2>
+      <p class="hint-texto">Busca un palet de refill (SIE) por su SSCC, por su código LM o por los dos. Solo consulta: no reabre ni cambia ninguna carga.</p>
+      <div class="busqueda-form refill-form">
+        <div class="form-group"><label for="refillSscc">SSCC</label><input type="text" id="refillSscc" inputmode="numeric" autocomplete="off" placeholder="00184000227900304411 (o solo el final)"></div>
+        <div class="form-group"><label for="refillCodigoLm">Código LM</label><input type="text" id="refillCodigoLm" inputmode="numeric" autocomplete="off" placeholder="92186704"></div>
+        <button type="button" id="btnBuscarRefill" onclick="buscarRefillUI_()">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Buscar refill
+        </button>
+        <button type="button" class="btn-secundario" onclick="limpiarRefillUI_()">Limpiar</button>
+      </div>
+      <div class="aviso-error" id="refillAviso"></div>
+      <div id="resultadosRefill"></div>
     </div>
 
     <!-- ══════════ VISTA: INCPC (pendientes de imprimir) ══════════ -->
@@ -1481,6 +1522,82 @@
     // cambia el HTML que genera el servidor.
     imprimirHtmlEtiquetas_(gas('htmlPendientesTienda', tienda));
   }
+
+  // ══ BUSCADOR DE REFILL: inicio ══
+  // Pestaña «Buscar refill»: palets SIE por SSCC y/o código LM. SOLO consulta: no reabre ni cambia ninguna carga.
+  var refillBusquedaN_ = 0; // la búsqueda más reciente gana si dos respuestas llegan cruzadas
+  var ETIQUETA_ESTADO_REFILL_ = { EN_CARGA: 'En carga', ENVIADO: 'Enviado', ENTREGADO: 'Entregado', SIN_CARGA: 'Sin carga' };
+  var TEXTO_COTEJO_REFILL_ = { COINCIDE: 'Coincide con el inventario', NO_ENCONTRADO: 'No encontrado en inventario', SIN_COTEJAR: 'Sin cotejar todavía' };
+
+  function fechaCortaRefill_(valor) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(valor || ''));
+    return m ? m[3] + '/' + m[2] + '/' + m[1] : String(valor || '');
+  }
+
+  function htmlDatoRefill_(titulo, valorHtml, clase) {
+    return '<div><dt>' + titulo + '</dt><dd' + (clase ? ' class="' + clase + '"' : '') + '>' + valorHtml + '</dd></div>';
+  }
+
+  function htmlTarjetaRefill_(r) {
+    var estado = ETIQUETA_ESTADO_REFILL_[r.estado] ? r.estado : 'SIN_CARGA';
+    var datos = htmlDatoRefill_('Código LM', r.codigoLm ? escapeHtml_(r.codigoLm) : '—')
+      + htmlDatoRefill_('Sección', r.seccion ? escapeHtml_(r.seccion) : '—')
+      + htmlDatoRefill_('Carga', r.idCarga ? escapeHtml_(r.idCarga) + (r.destino ? ' · ' + escapeHtml_(r.destino) : '') : '—')
+      + htmlDatoRefill_('Llegada prevista', r.fechaEntrega ? escapeHtml_(fechaCortaRefill_(r.fechaEntrega) + (r.horario ? ' ' + r.horario : '')) : '—')
+      + htmlDatoRefill_('Escaneado', r.escaneadoEn ? escapeHtml_(formatearFechaHora_(r.escaneadoEn)) : '—')
+      + htmlDatoRefill_('Inventario', escapeHtml_(TEXTO_COTEJO_REFILL_[r.cotejo] || TEXTO_COTEJO_REFILL_.SIN_COTEJAR), r.cotejo === 'NO_ENCONTRADO' ? 'refill-no-coincide' : '');
+    if (r.cargador) datos += htmlDatoRefill_('Cargador', escapeHtml_(r.cargador));
+    if (r.solicitadoPor && (r.solicitadoPor.ldap || r.solicitadoPor.motivo)) {
+      datos += htmlDatoRefill_('Solicitado por', escapeHtml_(r.solicitadoPor.ldap || '—') + (r.solicitadoPor.motivo ? ' — ' + escapeHtml_(r.solicitadoPor.motivo) : ''));
+    }
+    return '<div class="refill-card refill-' + estado + '">'
+      + '<div class="refill-cab"><span class="refill-badge refill-badge-' + estado + '">' + ETIQUETA_ESTADO_REFILL_[estado] + '</span><span class="valor-sscc">' + escapeHtml_(r.sscc) + '</span></div>'
+      + '<div class="refill-estado-texto">' + escapeHtml_(r.estadoTexto || '') + '</div>'
+      + '<dl class="refill-datos">' + datos + '</dl></div>';
+  }
+
+  function htmlResultadosRefill_(datos) {
+    var lista = (datos && datos.resultados) || [];
+    if (lista.length === 0) {
+      return '<p class="sin-resultados">No hay ningún refill con esos datos. Solo constan los palets escaneados en una carga desde HODOS.</p>';
+    }
+    return '<div class="tabla-titulo"><span class="badge-origen badge-origen-sie">SIE</span><span>Palets refill</span><span class="tabla-contador">' + lista.length + (datos.hayMas ? '+' : '') + '</span></div>'
+      + lista.map(function (r) { return htmlTarjetaRefill_(r); }).join('')
+      + (datos.hayMas ? '<p class="refill-aviso-mas">Hay más resultados de los que se muestran. Escribe más cifras para afinar la búsqueda.</p>' : '');
+  }
+
+  function buscarRefillUI_() {
+    var sscc = document.getElementById('refillSscc').value.trim();
+    var codigoLm = document.getElementById('refillCodigoLm').value.trim();
+    var aviso = document.getElementById('refillAviso');
+    var cont = document.getElementById('resultadosRefill');
+    aviso.textContent = '';
+    if (!sscc && !codigoLm) {
+      cont.innerHTML = '';
+      aviso.textContent = 'Escribe un SSCC o un código LM.';
+      return;
+    }
+    var n = ++refillBusquedaN_;
+    cont.innerHTML = '<p class="cargando-resultados">Buscando…</p>';
+    gas('buscarRefill', { sscc: sscc, codigoLm: codigoLm }).then(function (datos) {
+      if (n !== refillBusquedaN_) return;
+      cont.innerHTML = htmlResultadosRefill_(datos);
+    }).catch(function (err) {
+      if (n !== refillBusquedaN_) return;
+      cont.innerHTML = '';
+      aviso.textContent = mensajeError_(err);
+    });
+  }
+
+  function limpiarRefillUI_() {
+    refillBusquedaN_++; // una respuesta que aún esté de camino ya no se pinta
+    document.getElementById('refillSscc').value = '';
+    document.getElementById('refillCodigoLm').value = '';
+    document.getElementById('refillAviso').textContent = '';
+    document.getElementById('resultadosRefill').innerHTML = '';
+    document.getElementById('refillSscc').focus();
+  }
+  // ══ BUSCADOR DE REFILL: fin ══
 
   // Debajo de cada lote del historial: los números de pedido que se registraron en él. Los primeros 30 a la
   // vista y, si hay más, el resto tras «+N más» (un <details>: sin JS y sin cuadros del navegador).
@@ -3462,6 +3579,7 @@
     document.getElementById('vistaTorija').classList.toggle('vista-oculta', nombre !== 'torija');
     document.getElementById('vistaAntequera').classList.toggle('vista-oculta', nombre !== 'antequera');
     document.getElementById('vistaInversa').classList.toggle('vista-oculta', nombre !== 'inversa');
+    document.getElementById('vistaRefill').classList.toggle('vista-oculta', nombre !== 'refill');
     document.querySelectorAll('#tabBar button').forEach(function (b) { b.classList.toggle('active', b.dataset.tab === nombre); });
     // En móvil la barra de pestañas se desliza de lado: se deja a la vista la pestaña elegida.
     var btnActivo = document.querySelector('#tabBar button.active');
@@ -3476,6 +3594,7 @@
     if (nombre === 'preparacion') { cargarPreparacion_(); }
     if (ARRASTRES_[nombre]) { cargarArrastre_(nombre); }
     if (nombre === 'inversa') { cargarPestanaInversa_(); }
+    if (nombre === 'refill') { document.getElementById('refillSscc').focus(); } // listo para la pistola; no busca nada hasta pulsar Buscar o Intro
     actualizarBadges_();
   }
 
@@ -3567,6 +3686,7 @@
   });
 
   activarIntroComoAccion_('camionFecha', crearCargaUI);
+  ['refillSscc', 'refillCodigoLm'].forEach(function (id) { activarIntroComoAccion_(id, buscarRefillUI_); });
 
   iniciarVista();
 

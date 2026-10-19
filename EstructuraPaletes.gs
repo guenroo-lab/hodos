@@ -93,6 +93,77 @@ function leerPaletesPorTiendaFecha_(destino, fecha) {
   return supaGet_('palets', 'batea_id=in.(' + ids.map(encodeURIComponent).join(',') + ')').map(filaPaleteDesdeSupabase_);
 }
 
+// ── Buscador de refill (2026-10-19): SOLO LECTURA ───────────────────────────────────────────────────────────
+// Busca palets SIE por SSCC y/o código LM («contiene», para poder teclear solo el final) y dice en qué punto está
+// cada uno según su carga. No abre ni cambia nada: es el camino para mirar un refill sin reabrir su carga.
+var MAX_RESULTADOS_REFILL_ = 50;
+var MIN_CARACTERES_REFILL_ = 4;
+var COLUMNAS_PALET_REFILL_ = 'id,sscc,codigo_lm,seccion,encontrado,batea_id,fecha_creacion';
+var COLUMNAS_CARGA_REFILL_ = 'id_carga,destino,fecha_entrega,horario,estado,cargador,reabierta_en';
+
+function buscarRefill(filtros) {
+  filtros = filtros || {};
+  var sscc = normalizarSsccBusqueda_(filtros.sscc);
+  var codigoLm = normalizarCodigoLmBusqueda_(filtros.codigoLm);
+  if (!sscc && !codigoLm) throw new Error('Escribe un SSCC o un código LM para buscar el refill.');
+  if (sscc && sscc.length < MIN_CARACTERES_REFILL_) throw new Error('El SSCC necesita al menos ' + MIN_CARACTERES_REFILL_ + ' dígitos.');
+  if (codigoLm && codigoLm.length < MIN_CARACTERES_REFILL_) throw new Error('El código LM necesita al menos ' + MIN_CARACTERES_REFILL_ + ' caracteres.');
+
+  var partes = [];
+  if (sscc) partes.push('sscc=ilike.' + encodeURIComponent('*' + sscc + '*'));
+  if (codigoLm) partes.push('codigo_lm=ilike.' + encodeURIComponent('*' + codigoLm + '*'));
+  partes.push('order=fecha_creacion.desc,id.desc');
+  partes.push('limit=' + (MAX_RESULTADOS_REFILL_ + 1)); // uno de más: así se sabe si hay más de los que se enseñan
+  var palets = supaGet_('palets', partes.join('&'), COLUMNAS_PALET_REFILL_).map(filaPaleteDesdeSupabase_);
+  var hayMas = palets.length > MAX_RESULTADOS_REFILL_;
+  if (hayMas) palets = palets.slice(0, MAX_RESULTADOS_REFILL_);
+
+  // Las cargas de esos palets, en trozos por el límite de 2 KB de la URL de UrlFetchApp.
+  var idsCarga = distintosTexto_(palets.map(function (p) { return p.bateaId; }));
+  var cargas = {};
+  for (var i = 0; i < idsCarga.length; i += LOTE_IDS_CARGAS_) {
+    var trozo = idsCarga.slice(i, i + LOTE_IDS_CARGAS_);
+    leerCargas_('id_carga=in.(' + trozo.map(function (id) { return encodeURIComponent(id); }).join(',') + ')', COLUMNAS_CARGA_REFILL_).forEach(function (c) { cargas[c.idCarga] = c; });
+  }
+
+  // «Solicitado por» de Kairos, igual que en el informe de cierre (si Kairos no lo tiene, queda vacío).
+  var porDestino = {};
+  palets.forEach(function (p) {
+    var c = cargas[p.bateaId];
+    if (c) (porDestino[c.destino] = porDestino[c.destino] || []).push(p.sscc);
+  });
+  var solicitantes = {};
+  Object.keys(porDestino).forEach(function (destino) {
+    var mapa = _solicitantesPorSscc_(destino, porDestino[destino]);
+    Object.keys(mapa).forEach(function (s) { solicitantes[destino + '|' + s] = mapa[s]; });
+  });
+
+  var ahora = Date.now();
+  return {
+    hayMas: hayMas,
+    resultados: palets.map(function (p) {
+      var c = cargas[p.bateaId] || null;
+      var estado = estadoRefill_(c, ahora);
+      var sol = c ? solicitantes[c.destino + '|' + p.sscc] : null;
+      return {
+        sscc: p.sscc,
+        codigoLm: p.codigoLm || '',
+        seccion: p.seccion || '',
+        cotejo: p.encontrado === true ? 'COINCIDE' : (p.encontrado === false ? 'NO_ENCONTRADO' : 'SIN_COTEJAR'),
+        escaneadoEn: fechaComoTexto(p.fechaCreacion),
+        idCarga: p.bateaId || '',
+        destino: c ? c.destino : '',
+        fechaEntrega: c ? fechaComoTexto(c.fechaEntrega) : '',
+        horario: c ? (c.horario || '') : '',
+        estado: estado.codigo,
+        estadoTexto: estado.texto,
+        cargador: c && c.cargador ? c.cargador : '',
+        solicitadoPor: sol ? { ldap: sol.ldap || '', motivo: sol.motivo || '' } : null
+      };
+    })
+  };
+}
+
 // Llamado desde la rama residual de escanearSoporte (Backend.gs) cuando el valor
 // escaneado no coincide con ningún soporte de pedido cliente y tiene forma de SSCC.
 // Forma de respuesta distinta a la de un soporte (tipo:'palet') para que Index.html

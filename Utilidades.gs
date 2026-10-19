@@ -459,6 +459,35 @@ function cargaModificablePorLlegada_(carga, ahoraMs) {
   return ahoraMs < llegada;
 }
 
+// ── Buscador de refill (palets SIE), solo lectura ───────────────────────────────────────────────────────────
+// SSCC tecleado o leído con la pistola: solo dígitos; con el prefijo «00» del código de barras GS1-128 (20 dígitos)
+// se deja en los 18 del SSCC. En la base unos SSCC están guardados con el «00» y otros sin él: se busca «contiene».
+function normalizarSsccBusqueda_(texto) {
+  var s = String(texto == null ? '' : texto).replace(/\D/g, '');
+  if (s.length === 20 && s.substring(0, 2) === '00') s = s.substring(2);
+  return s;
+}
+
+// Código LM: solo letras y números (nada que pueda colarse en el filtro de la URL).
+function normalizarCodigoLmBusqueda_(texto) {
+  return String(texto == null ? '' : texto).replace(/[^0-9A-Za-z]/g, '');
+}
+
+// En qué punto está un palet de refill según su carga. Es el mismo criterio que el resto de la app: una carga cerrada
+// ya está enviada (su informe ha salido a la tienda) y, cumplida su fecha y hora de llegada, se da por entregada.
+function estadoRefill_(carga, ahoraMs) {
+  if (!carga) return { codigo: 'SIN_CARGA', texto: 'Sin carga asociada' };
+  if (carga.estado === 'ABIERTA') {
+    return { codigo: 'EN_CARGA', texto: carga.reabiertaEn ? 'En carga (carga reabierta, aún sin volver a cerrar)' : 'En carga (la carga sigue abierta)' };
+  }
+  if (carga.estado === 'CERRADA') {
+    var llegada = fechaLlegadaCarga_(carga.fechaEntrega, carga.horario);
+    if (llegada != null && ahoraMs >= llegada) return { codigo: 'ENTREGADO', texto: 'Entregado (carga cerrada, hora de llegada ya pasada)' };
+    return { codigo: 'ENVIADO', texto: 'Enviado (carga cerrada, el camión aún no ha llegado)' };
+  }
+  return { codigo: 'SIN_CARGA', texto: 'Carga ' + String(carga.estado || 'sin estado').toLowerCase() };
+}
+
 function textoLlegadaCarga_(carga) {
   var f = /^(\d{4})-(\d{2})-(\d{2})/.exec(String((carga && carga.fechaEntrega) || ''));
   var fecha = f ? f[3] + '/' + f[2] + '/' + f[1] : String((carga && carga.fechaEntrega) || '');

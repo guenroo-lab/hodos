@@ -405,6 +405,19 @@ implementadas: Módulo 1 (carga por lote + etiquetas), Cabecera+Buscadores, Fase
   de cada lote es el nº de ETIQUETAS (soportes), no de pedidos distintos: puede ser mayor que la lista de números.
   Pruebas: `test/egressHistorialLotes.test.js` (servidor), `test/indexHistorialPedidos.test.js` (pantalla) y el banco
   `pruebas-egress-fase2.js` (lotes con varios pedidos; `OLD_REF=4ddeeef UMBRAL_BYTES=1.05 SIN_TOPES_ACCION=1`).
+- **Buscar refill (2026-10-19).** Pestaña de la barra lateral «Buscar refill» (`#vistaRefill`): palets SIE por SSCC y/o código
+  LM, SOLO consulta (no reabre ni toca ninguna carga). Los refill NO son etiquetas: son filas de `public.palets` (un SSCC
+  escaneado, ligado a su carga por `batea_id`), por eso «Buscar» (que lee `etiquetas`) no los encuentra. `buscarRefill(filtros)`
+  (`EstructuraPaletes.gs`) busca «contiene» (ilike) por `sscc` y/o `codigo_lm` (mín. 4 caracteres, máx. 50 resultados y avisa
+  si hay más), los más recientes primero, y lee las cargas de esos palets en trozos de 40. El SSCC se normaliza
+  (`normalizarSsccBusqueda_`, `Utilidades.gs`): solo dígitos y sin el «00» de los 20 dígitos del código de barras, porque en la base
+  1.050 de 1.051 están guardados CON «00». Un mismo SSCC puede salir varias veces (31 repetidos): una tarjeta por carga. El estado
+  sale de la carga (`estadoRefill_`): abierta = «En carga» (con nota si fue reabierta); cerrada y camión sin llegar = «Enviado»;
+  cerrada y pasada la hora de llegada = «Entregado» (misma regla que `fechaLlegadaCarga_`); sin carga = «Sin carga». Además:
+  cotejo con el inventario (coincide / no encontrado / sin cotejar), llegada prevista, cargador y «Solicitado por» de Kairos
+  (`_solicitantesPorSscc_`, vacío mientras Kairos tenga el refill apagado). Al abrir la pestaña solo se pone el cursor en el SSCC
+  (no busca nada: no dispara la carga de etiquetas de «Buscar»); Intro busca (la pistola lo manda). Pruebas:
+  `test/buscadorRefill.test.js` (servidor) y `test/indexBuscadorRefill.test.js` (pantalla); unas 78 mutaciones detectadas.
 - **Sin diálogos nativos del navegador (regla del usuario, 2026-10-15).** `Index.html` no usa `alert()`,
   `confirm()` ni `prompt()` (salen con la URL fea de googleusercontent.com): avisos con
   `mostrarModalAviso_(titulo, texto)` y confirmaciones con
